@@ -15,7 +15,7 @@ import java.lang.reflect.Executable
 /**
  * Main libxposed API 102 module entry for `com.scluzlep.fxplusmodule`.
  * Supports dual FX profiles (`9012` / `9108`) with structural fallback, live config
- * synchronization via `RemotePreferences` + `fxplusmodule_local`, and full hot-reload
+ * stored inside FX's `fxplusmodule_local` preferences, and full hot-reload
  * handle replacement and executor cleanup.
  */
 class FxPlusModule : XposedModule() {
@@ -45,11 +45,6 @@ class FxPlusModule : XposedModule() {
         if (isSystemServerProcess) return
         if (param.isFirstPackage) {
             currentPackageName = param.packageName
-        }
-
-        if (param.packageName == ConfigContract.MODULE_PACKAGE && param.isFirstPackage) {
-            installSelfStatusHook(param.classLoader, oldById = null)
-            return
         }
 
         if (param.packageName == ConfigContract.TARGET_FX_PACKAGE && param.isFirstPackage) {
@@ -92,12 +87,6 @@ class FxPlusModule : XposedModule() {
             oldById[key] = handle
         }
 
-        if (pkgName == ConfigContract.MODULE_PACKAGE) {
-            installSelfStatusHook(appClassLoader, oldById)
-            unhookRemaining(oldById)
-            return
-        }
-
         if (pkgName == ConfigContract.TARGET_FX_PACKAGE) {
             setupTargetHooks(
                 classLoader = appClassLoader,
@@ -112,29 +101,11 @@ class FxPlusModule : XposedModule() {
         log(Log.INFO, TAG, "Hot reload completed for pkg=$pkgName process=$currentProcessName")
     }
 
-    private fun installSelfStatusHook(
-        classLoader: ClassLoader,
-        oldById: MutableMap<String, XposedInterface.HookHandle>?
-    ) {
-        runCatching {
-            val clazz = Class.forName("${ConfigContract.MODULE_PACKAGE}.xposed.ModuleStatus", false, classLoader)
-            val method = clazz.getDeclaredMethod("isSelfHooked")
-            installOrReplaceHook(
-                id = "self:ModuleStatus#isSelfHooked",
-                executable = method,
-                oldById = oldById
-            ) { true }
-        }.onFailure { err ->
-            log(Log.WARN, TAG, "Failed to install ModuleStatus.isSelfHooked hook", err)
-        }
-    }
-
     private fun setupTargetHooks(
         classLoader: ClassLoader,
         appInfo: android.content.pm.ApplicationInfo?,
         oldById: MutableMap<String, XposedInterface.HookHandle>?
     ) {
-        FxConfigBridge.initRemote(this)
         val listener: (ModuleConfig, ModuleConfig) -> Unit = { _, newConfig ->
             PrefetchCacheManager.peekInstance()?.onConfigUpdated(newConfig)
             TouchImageHardwareHook.onConfigChanged(
@@ -215,6 +186,7 @@ class FxPlusModule : XposedModule() {
         RemoteThumbnailHook.install(symbols, installer)
         AndroidDataAccessHook.install(symbols, installer)
         FxSettingsInjectorHook.install(symbols, installer)
+        GoogleDriveOAuthHook.install(symbols, installer)
         BonusLimitsHook.install(symbols, installer)
 
         log(
@@ -227,6 +199,7 @@ class FxPlusModule : XposedModule() {
     private fun attachHostContext(context: Context) {
         val appCtx = context.applicationContext ?: context
         FxConfigBridge.attachContext(appCtx)
+        GoogleDriveOAuthHook.attachContext(appCtx)
         AndroidDataAccessHook.attachContext(appCtx)
         PrefetchCacheManager.getOrCreate(appCtx) { FxConfigBridge.current }
     }

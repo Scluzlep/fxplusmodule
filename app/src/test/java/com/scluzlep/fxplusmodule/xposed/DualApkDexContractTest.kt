@@ -59,6 +59,61 @@ class DualApkDexContractTest {
         assertTrue(c9108.fields.any { it.className == "nextapp.fx.ui.content.k" && it.fieldName == "n2" })
     }
 
+    @Test
+    fun v13ContractsIncludeThemeHomeMenuAndGoogleDriveSymbols() {
+        val c9012 = FxDexContracts.contract9012
+        val c9108 = FxDexContracts.contract9108
+
+        assertTrue(c9012.classes.containsAll(listOf(
+            "xc.f",
+            "nextapp.fx.ui.homecontent.HomeContentView",
+            "nextapp.fx.ui.homecontent.HomeContentView\$d",
+            "nextapp.fx.ui.content.j0",
+            "le.t",
+            "le.f0",
+            "le.r",
+            "le.b\$a",
+            "nextapp.fx.ui.res.ActionIcons",
+            "nextapp.fx.plus.ui.net.cloud.GoogleDriveAuthActivity",
+            "nextapp.fx.plus.dirimpl.googledrive.b\$a",
+            "ic.e\$a"
+        )))
+        assertTrue(c9108.classes.containsAll(listOf(
+            "ef.g",
+            "nextapp.fx.ui.homecontent.HomeContentView",
+            "be.p",
+            "nextapp.fx.ui.content.b0",
+            "yg.r",
+            "yg.y",
+            "yg.p",
+            "yg.b",
+            "nextapp.fx.ui.res.ActionIcons",
+            "nextapp.fx.plus.ui.net.cloud.GoogleDriveAuthActivity",
+            "gg.d",
+            "jh.b"
+        )))
+
+        assertTrue(c9012.methods.any { it.className == "xc.f" && it.methodName == "P" })
+        assertTrue(c9012.methods.any { it.className == "xc.f" && it.methodName == "N" })
+        assertTrue(c9012.methods.any { it.className == "xc.f" && it.methodName == "O" })
+        assertTrue(c9012.methods.any { it.className == "nextapp.fx.ui.homecontent.HomeContentView\$d" && it.methodName == "p" })
+        assertTrue(c9012.methods.any { it.className == "nextapp.fx.plus.dirimpl.googledrive.b\$a" && it.methodName == "c" && it.isStatic })
+        assertTrue(c9012.methods.any { it.className == "ic.e\$a" && it.methodName == "<init>" })
+
+        assertTrue(c9108.methods.any { it.className == "ef.g" && it.methodName == "w" })
+        assertTrue(c9108.methods.any { it.className == "ef.g" && it.methodName == "u" })
+        assertTrue(c9108.methods.any { it.className == "ef.g" && it.methodName == "v" })
+        assertTrue(c9108.methods.any { it.className == "be.p" && it.methodName == "m" })
+        assertTrue(c9108.methods.any { it.className == "gg.d" && it.methodName == "<init>" })
+        assertTrue(c9108.methods.any { it.className == "jh.b" && it.methodName == "<init>" })
+
+        assertTrue(c9012.fields.any { it.className == "nextapp.fx.ui.homecontent.HomeContentView\$d" && it.fieldName == "d" })
+        assertTrue(c9108.fields.any { it.className == "be.p" && it.fieldName == "c" })
+        assertTrue(c9108.fields.any { it.className == "gg.d" && it.fieldName == "a" })
+        assertTrue(c9108.fields.any { it.className == "jh.b" && it.fieldName == "a" })
+        assertTrue(c9108.fields.any { it.className == "jh.b" && it.fieldName == "b" })
+    }
+
     private fun resolveRepoRelativeFile(relFromRepoRoot: String): File {
         val direct = File(relFromRepoRoot)
         if (direct.isFile) return direct
