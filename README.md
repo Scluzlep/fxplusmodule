@@ -1,6 +1,13 @@
-# FX Plus Module
+# fxplusmodule
 
 面向 FX File Explorer 的 libxposed API 102 增强模块，包名为 `com.scluzlep.fxplusmodule`，作用域为 `nextapp.fx`。
+
+## 更新日志
+
+### v1.2
+- 将应用显示名称统一更名为 `fxplusmodule`，并更新管理端标题与 FX 设置弹窗中的跳转/提示文案。
+- 更新自适应启动图标为 FX 风格并增加右上角 `+` 徽标（支持 Monochrome 主题图标）。
+- 推进模块默认版本至 `1.2`（`versionCode = 1002001`）。
 
 ## 支持版本
 
@@ -42,7 +49,7 @@
 
 ### 6. 双端设置与原地热重载
 - 注入 FX 原生设置页 `MainPrefActivity`，添加 `FX Plus 增强设置` 入口并弹出跟随主题的原生配置对话框。
-- 独立管理端与 FX 原生设置弹窗通过 `RemotePreferences` 与 FX 本地偏好按 `updatedAtMs` 时间戳双向同步，修改后实时生效。
+- `fxplusmodule` 独立管理端与 FX 原生设置弹窗通过 `RemotePreferences` 与 FX 本地偏好按 `updatedAtMs` 时间戳双向同步，修改后实时生效。
 - 支持 libxposed API 102 的 `onHotReloading` 与 `onHotReloaded`，热重载时清理旧句柄并关闭遗留预加载线程池。
 
 ### 7. 附加文本限制解除

@@ -35,7 +35,7 @@ import java.util.Locale
  * Injects native `FX Plus 增强设置` into FX's `MainPrefActivity` (`9012` & `9108`)
  * and builds a theme-aware FX native dialog (`nextapp.fx.ui.widget.k` / `n`) exposing all
  * live toggles, preset + custom inputs for `预加载个数` and `预加载容量上限`, cache cleanup,
- * and shortcut to the standalone `FX Plus` app.
+ * and shortcut to the standalone `fxplusmodule` app.
  */
 object FxSettingsInjectorHook {
 
@@ -215,7 +215,7 @@ object FxSettingsInjectorHook {
             st.fxDialogSetHeader?.invoke(dialogObj, ENTRY_TITLE)
             st.fxDialogSetDescription?.invoke(
                 dialogObj,
-                "配置立即生效并与 FX Plus 独立管理端同步"
+                "配置立即生效并与 fxplusmodule 独立管理端同步"
             )
             val isLight = (st.fxDialogIsBackgroundLight?.invoke(dialogObj) as? Boolean) ?: true
             val palette = DialogPalette.fromBackgroundLight(isLight)
@@ -729,7 +729,7 @@ object FxSettingsInjectorHook {
             }
         }
         val launchBtn = Button(activity).apply {
-            text = "打开 FX Plus 与 Shizuku"
+            text = "打开 fxplusmodule 与 Shizuku"
             isAllCaps = false
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
                 marginStart = dp(activity, 6)
@@ -823,7 +823,7 @@ object FxSettingsInjectorHook {
         runCatching {
             activity.startActivity(intent)
         }.onFailure {
-            Toast.makeText(activity, "无法打开 FX Plus 应用，请检查是否已安装", Toast.LENGTH_SHORT).show()
+            Toast.makeText(activity, "无法打开 fxplusmodule 应用，请检查是否已安装", Toast.LENGTH_SHORT).show()
         }
     }
 
