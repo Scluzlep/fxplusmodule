@@ -67,6 +67,7 @@ class FxPlusModule : XposedModule() {
         FxConfigBridge.detach()
         ViewerPrefetchHook.clearTransientStateOnHotReload()
         FolderCacheLifecycleHook.clearOnHotReload()
+        TouchImageHardwareHook.clearOnHotReload()
         PrefetchCacheManager.shutdownShared()
         PrivilegedStorageClient.resetOnHotReload()
         param.setSavedInstanceState(currentPackageName.ifBlank { null })
@@ -136,6 +137,10 @@ class FxPlusModule : XposedModule() {
         FxConfigBridge.initRemote(this)
         val listener: (ModuleConfig, ModuleConfig) -> Unit = { _, newConfig ->
             PrefetchCacheManager.peekInstance()?.onConfigUpdated(newConfig)
+            TouchImageHardwareHook.onConfigChanged(
+                hardwareImageEnabled = newConfig.disableSoftwareImageRendering,
+                hardwareGifEnabled = newConfig.enableHardwareGifPlayback
+            )
         }
         configListener = listener
         FxConfigBridge.addListener(listener)
@@ -201,6 +206,12 @@ class FxPlusModule : XposedModule() {
         SiblingSwipeHook.install(symbols, installer)
         ViewerPrefetchHook.install(symbols, installer)
         FolderCacheLifecycleHook.install(symbols, installer)
+        TouchImageHardwareHook.install(
+            symbols = symbols,
+            installer = installer,
+            isHardwareImageEnabled = { FxConfigBridge.current.disableSoftwareImageRendering },
+            isHardwareGifEnabled = { FxConfigBridge.current.enableHardwareGifPlayback }
+        )
         RemoteThumbnailHook.install(symbols, installer)
         AndroidDataAccessHook.install(symbols, installer)
         FxSettingsInjectorHook.install(symbols, installer)
