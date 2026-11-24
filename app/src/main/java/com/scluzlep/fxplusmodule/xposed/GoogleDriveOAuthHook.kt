@@ -32,8 +32,8 @@ import java.util.WeakHashMap
  */
 object GoogleDriveOAuthHook {
 
-    const val KEY_GOOGLE_DRIVE_CLIENT_ID = "google_drive_client_id"
-    const val KEY_GOOGLE_DRIVE_CLIENT_SECRET = "google_drive_client_secret"
+    const val KEY_GOOGLE_DRIVE_CLIENT_ID = ConfigContract.KEY_GOOGLE_DRIVE_CLIENT_ID
+    const val KEY_GOOGLE_DRIVE_CLIENT_SECRET = ConfigContract.KEY_GOOGLE_DRIVE_CLIENT_SECRET
     const val DEFAULT_CLIENT_ID = "907044817113-8d3ccj149pvkhj2ru91scjaahpr8v1e1.apps.googleusercontent.com"
 
     private const val HELPER_CARD_TAG = "fxplus_gdrive_oauth_card"

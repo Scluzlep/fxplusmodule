@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.SharedPreferences
 import com.scluzlep.fxplusmodule.config.ConfigContract
 import com.scluzlep.fxplusmodule.config.ModuleConfig
-import io.github.libxposed.api.XposedModule
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
@@ -29,8 +28,6 @@ object FxConfigBridge {
     private val localListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
         reloadLocalLocked()
     }
-
-    fun initRemote(@Suppress("UNUSED_PARAMETER") module: XposedModule) = Unit
 
     fun attachContext(context: Context) {
         val appCtx = context.applicationContext ?: context

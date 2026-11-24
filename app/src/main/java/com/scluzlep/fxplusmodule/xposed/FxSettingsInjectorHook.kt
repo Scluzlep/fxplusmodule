@@ -63,8 +63,6 @@ object FxSettingsInjectorHook {
     private const val DIALOG_DESCRIPTION = "配置立即生效"
     private const val HOME_MENU_ENTRY_TITLE = "FxPlusModule"
     private const val HOME_MENU_CASE_9108 = 14
-    private const val METHOD_REQUEST_PERMISSION = "request_permission"
-    private const val KEY_SHIZUKU_INSTALLED = "shizuku_installed"
 
     private data class StorageBackendStatus(
         val bridgeReachable: Boolean,
@@ -836,7 +834,7 @@ object FxSettingsInjectorHook {
         val shizukuGranted = ping?.getBoolean(ShizukuBridgeContract.KEY_SHIZUKU_GRANTED, false) ?: false
         val serviceBound = ping?.getBoolean(ShizukuBridgeContract.KEY_SERVICE_BOUND, false) ?: false
         val privilegedUid = ping?.getInt(ShizukuBridgeContract.KEY_PRIVILEGED_UID, -1) ?: -1
-        val shizukuInstalled = (ping?.getBoolean(KEY_SHIZUKU_INSTALLED, false) == true) ||
+        val shizukuInstalled = (ping?.getBoolean(ShizukuBridgeContract.KEY_SHIZUKU_INSTALLED, false) == true) ||
             shizukuAvailable ||
             isPackageInstalled(appContext, ShizukuBridgeContract.SHIZUKU_MANAGER_PACKAGE)
         val rootAvailable = if (!shizukuGranted) {
@@ -865,7 +863,7 @@ object FxSettingsInjectorHook {
             val reply = runCatching {
                 appCtx.contentResolver.call(
                     Uri.parse(ShizukuBridgeContract.CONTENT_URI_BASE),
-                    METHOD_REQUEST_PERMISSION,
+                    ShizukuBridgeContract.METHOD_REQUEST_PERMISSION,
                     null,
                     null
                 )

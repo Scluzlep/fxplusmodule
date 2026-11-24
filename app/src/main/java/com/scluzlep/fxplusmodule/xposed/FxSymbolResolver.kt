@@ -133,7 +133,8 @@ object FxDexContracts {
             "nextapp.fx.ui.res.ActionIcons",
             "nextapp.fx.plus.ui.net.cloud.GoogleDriveAuthActivity",
             "nextapp.fx.plus.dirimpl.googledrive.b\$a",
-            "ic.e\$a"
+            "ic.e\$a",
+            "i9.e"
         ).toList()
 
         val methods = listOf(
@@ -324,9 +325,11 @@ object FxDexContracts {
             DexMethodSpec("se.f", "g", "()[Ljava/lang/Object;", false),
 
             // Live FX theme palette, Home overflow menu, and Google Drive OAuth (v1.3)
+            DexMethodSpec("xc.f", "e", "(Landroid/content/Context;)Lxc/f;", true),
             DexMethodSpec("xc.f", "P", "()I", false),
             DexMethodSpec("xc.f", "N", "()I", false),
             DexMethodSpec("xc.f", "O", "()I", false),
+            DexMethodSpec("i9.e", "<init>", "(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/Runnable;)V", false),
             DexMethodSpec("nextapp.fx.ui.homecontent.HomeContentView\$d", "p", "(Lle/t;Lle/t;Lnextapp/fx/ui/content/k0;)V", false),
             DexMethodSpec("le.t", "f", "(Lle/z;)V", false),
             DexMethodSpec("le.t", "size", "()I", false),
@@ -416,6 +419,8 @@ object FxDexContracts {
             DexFieldSpec("se.f", "f", "[Ljava/lang/Object;", false),
 
             // Live FX theme palette, Home overflow menu, and Google Drive OAuth (v1.3)
+            DexFieldSpec("nextapp.fx.ui.viewer.image.ImageViewerActivity", "R5", "Landroid/widget/ProgressBar;", false),
+            DexFieldSpec("nextapp.fx.ui.widget.k", "ui", "Lxc/f;", false),
             DexFieldSpec("xc.f", "j", "Z", false),
             DexFieldSpec("xc.f", "l", "I", false),
             DexFieldSpec("xc.f", "k", "I", false),
@@ -523,7 +528,8 @@ object FxDexContracts {
             "nextapp.fx.plus.ui.net.cloud.GoogleDriveAuthActivity",
             "gg.d",
             "jh.b",
-            "d4.b"
+            "d4.b",
+            "bb.d"
         ).toList()
 
         val methods = listOf(
@@ -685,9 +691,11 @@ object FxDexContracts {
             DexMethodSpec("hh.f", "G", "()Lhh/f;", false),
 
             // Live FX theme palette, Home overflow menu, and Google Drive OAuth (v1.3)
+            DexMethodSpec("ef.g", "b", "(Landroid/content/Context;)Lef/g;", true),
             DexMethodSpec("ef.g", "w", "()I", false),
             DexMethodSpec("ef.g", "u", "()I", false),
             DexMethodSpec("ef.g", "v", "()I", false),
+            DexMethodSpec("bb.d", "<init>", "(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/Runnable;)V", false),
             DexMethodSpec("be.p", "m", "(Lyg/r;Lyg/r;I)V", false),
             DexMethodSpec("yg.r", "d", "(Lyg/u;)V", false),
             DexMethodSpec("yg.w", "getTitle", "()Ljava/lang/CharSequence;", false),
@@ -799,6 +807,8 @@ object FxDexContracts {
             DexFieldSpec("hh.f", "f", "[Ljava/lang/Object;", false),
 
             // Live FX theme palette, Home overflow menu, and Google Drive OAuth (v1.3)
+            DexFieldSpec("nextapp.fx.ui.viewer.image.ImageViewerActivity", "N2", "Landroid/widget/ProgressBar;", false),
+            DexFieldSpec("nextapp.fx.ui.widget.n", "ui", "Lef/g;", false),
             DexFieldSpec("ef.g", "j", "Z", false),
             DexFieldSpec("ef.g", "l", "I", false),
             DexFieldSpec("ef.g", "k", "I", false),

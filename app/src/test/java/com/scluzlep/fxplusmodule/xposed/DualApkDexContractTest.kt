@@ -76,7 +76,8 @@ class DualApkDexContractTest {
             "nextapp.fx.ui.res.ActionIcons",
             "nextapp.fx.plus.ui.net.cloud.GoogleDriveAuthActivity",
             "nextapp.fx.plus.dirimpl.googledrive.b\$a",
-            "ic.e\$a"
+            "ic.e\$a",
+            "i9.e"
         )))
         assertTrue(c9108.classes.containsAll(listOf(
             "ef.g",
@@ -90,24 +91,33 @@ class DualApkDexContractTest {
             "nextapp.fx.ui.res.ActionIcons",
             "nextapp.fx.plus.ui.net.cloud.GoogleDriveAuthActivity",
             "gg.d",
-            "jh.b"
+            "jh.b",
+            "bb.d"
         )))
 
+        assertTrue(c9012.methods.any { it.className == "xc.f" && it.methodName == "e" && it.isStatic })
         assertTrue(c9012.methods.any { it.className == "xc.f" && it.methodName == "P" })
         assertTrue(c9012.methods.any { it.className == "xc.f" && it.methodName == "N" })
         assertTrue(c9012.methods.any { it.className == "xc.f" && it.methodName == "O" })
+        assertTrue(c9012.methods.any { it.className == "i9.e" && it.methodName == "<init>" })
         assertTrue(c9012.methods.any { it.className == "nextapp.fx.ui.homecontent.HomeContentView\$d" && it.methodName == "p" })
         assertTrue(c9012.methods.any { it.className == "nextapp.fx.plus.dirimpl.googledrive.b\$a" && it.methodName == "c" && it.isStatic })
         assertTrue(c9012.methods.any { it.className == "ic.e\$a" && it.methodName == "<init>" })
 
+        assertTrue(c9108.methods.any { it.className == "ef.g" && it.methodName == "b" && it.isStatic })
         assertTrue(c9108.methods.any { it.className == "ef.g" && it.methodName == "w" })
         assertTrue(c9108.methods.any { it.className == "ef.g" && it.methodName == "u" })
         assertTrue(c9108.methods.any { it.className == "ef.g" && it.methodName == "v" })
+        assertTrue(c9108.methods.any { it.className == "bb.d" && it.methodName == "<init>" })
         assertTrue(c9108.methods.any { it.className == "be.p" && it.methodName == "m" })
         assertTrue(c9108.methods.any { it.className == "gg.d" && it.methodName == "<init>" })
         assertTrue(c9108.methods.any { it.className == "jh.b" && it.methodName == "<init>" })
 
+        assertTrue(c9012.fields.any { it.className == "nextapp.fx.ui.viewer.image.ImageViewerActivity" && it.fieldName == "R5" })
+        assertTrue(c9012.fields.any { it.className == "nextapp.fx.ui.widget.k" && it.fieldName == "ui" })
         assertTrue(c9012.fields.any { it.className == "nextapp.fx.ui.homecontent.HomeContentView\$d" && it.fieldName == "d" })
+        assertTrue(c9108.fields.any { it.className == "nextapp.fx.ui.viewer.image.ImageViewerActivity" && it.fieldName == "N2" })
+        assertTrue(c9108.fields.any { it.className == "nextapp.fx.ui.widget.n" && it.fieldName == "ui" })
         assertTrue(c9108.fields.any { it.className == "be.p" && it.fieldName == "c" })
         assertTrue(c9108.fields.any { it.className == "gg.d" && it.fieldName == "a" })
         assertTrue(c9108.fields.any { it.className == "jh.b" && it.fieldName == "a" })

@@ -15,18 +15,16 @@ enum class PrefetchLimitMode(val displayName: String) {
 }
 
 /**
- * Shared constants, preference keys, bounds, and presets across the standalone app,
- * libxposed RemotePreferences, and the FX File Explorer in-process bridge.
+ * Shared constants, preference keys, bounds, and presets used by `ModuleConfig`
+ * and the FX File Explorer in-process preferences bridge (`fxplusmodule_local`).
  */
 object ConfigContract {
     const val MODULE_PACKAGE = "com.scluzlep.fxplusmodule"
-    const val MAIN_ACTIVITY_CLASS = "com.scluzlep.fxplusmodule.ui.MainActivity"
     const val TARGET_FX_PACKAGE = "nextapp.fx"
 
     const val FX_VERSION_CODE_9012 = 9012L
     const val FX_VERSION_CODE_9108 = 9108L
 
-    const val PREFS_NAME_REMOTE = "fxplusmodule"
     const val PREFS_NAME_LOCAL = "fxplusmodule_local"
     const val PREFETCH_CACHE_DIR_NAME = "fxplus_prefetch"
     const val BYTES_PER_MIB = 1024L * 1024L
