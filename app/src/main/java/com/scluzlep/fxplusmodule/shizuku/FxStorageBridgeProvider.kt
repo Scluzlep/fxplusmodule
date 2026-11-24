@@ -26,6 +26,10 @@ class FxStorageBridgeProvider : ContentProvider() {
         verifyAuthorizedCaller()
         return when (method) {
             ShizukuBridgeContract.METHOD_PING -> handlePing()
+            ShizukuBridgeContract.METHOD_REQUEST_PERMISSION -> {
+                ShizukuStatusHelper.requestPermission()
+                handlePing()
+            }
             ShizukuBridgeContract.METHOD_LIST -> handleList(extras?.getString(ShizukuBridgeContract.KEY_PATH) ?: arg)
             ShizukuBridgeContract.METHOD_STAT -> handleStat(extras?.getString(ShizukuBridgeContract.KEY_PATH) ?: arg)
             ShizukuBridgeContract.METHOD_MKDIRS -> handleMkdirs(extras?.getString(ShizukuBridgeContract.KEY_PATH) ?: arg)
@@ -104,10 +108,10 @@ class FxStorageBridgeProvider : ContentProvider() {
     private fun handlePing(): Bundle {
         ShizukuStatusHelper.refresh()
         val service = ShizukuStatusHelper.getOrBindService(timeoutMs = 2_500L)
-        ShizukuStatusHelper.refresh()
-        val snap = ShizukuStatusHelper.status.value
+        val snap = ShizukuStatusHelper.refresh()
         return Bundle().apply {
             putBoolean(ShizukuBridgeContract.KEY_OK, true)
+            putBoolean(ShizukuBridgeContract.KEY_SHIZUKU_INSTALLED, snap.shizukuInstalled)
             putBoolean(ShizukuBridgeContract.KEY_SHIZUKU_AVAILABLE, snap.binderAlive)
             putBoolean(ShizukuBridgeContract.KEY_SHIZUKU_GRANTED, snap.permissionGranted)
             putBoolean(ShizukuBridgeContract.KEY_SERVICE_BOUND, service != null && snap.serviceBound)

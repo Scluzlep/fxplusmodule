@@ -65,7 +65,7 @@ jobs:
               prop_text = prop_raw.decode("utf-8")
               assert "minApiVersion=102" in prop_text
               assert "targetApiVersion=102" in prop_text
-              assert "staticScope=false" in prop_text
+              assert "staticScope=true" in prop_text
               assert "exceptionMode=protective" in prop_text
               assert "autoHotReload=true" in prop_text
               init_raw = zf.read("META-INF/xposed/java_init.list")
@@ -78,13 +78,14 @@ jobs:
           PY
           BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
           MANIFEST_TREE="$("$BUILD_TOOLS/aapt2" dump xmltree "$DEBUG_APK" --file AndroidManifest.xml)"
-          echo "$MANIFEST_TREE" | grep -q "com.scluzlep.fxplusmodule.FxPlusApplication"
-          echo "$MANIFEST_TREE" | grep -q "io.github.libxposed.service.XposedProvider"
-          echo "$MANIFEST_TREE" | grep -q "com.scluzlep.fxplusmodule.XposedService"
           echo "$MANIFEST_TREE" | grep -q "rikka.shizuku.ShizukuProvider"
           echo "$MANIFEST_TREE" | grep -q "com.scluzlep.fxplusmodule.shizuku.FxStorageBridgeProvider"
           echo "$MANIFEST_TREE" | grep -q "moe.shizuku.manager.permission.API_V23"
           echo "$MANIFEST_TREE" | grep -q "nextapp.fx"
+          if echo "$MANIFEST_TREE" | grep -q "android.intent.category.LAUNCHER"; then
+            echo "::error::Launcher activity category must not be present"
+            exit 1
+          fi
           if echo "$MANIFEST_TREE" | grep -q "xposedminversion"; then
             echo "::error::Legacy xposedminversion metadata present"
             exit 1
@@ -247,13 +248,14 @@ jobs:
           fi
 
           MANIFEST_TREE="$("$BUILD_TOOLS/aapt2" dump xmltree "$OUT_APK" --file AndroidManifest.xml)"
-          echo "$MANIFEST_TREE" | grep -q "com.scluzlep.fxplusmodule.FxPlusApplication"
-          echo "$MANIFEST_TREE" | grep -q "io.github.libxposed.service.XposedProvider"
-          echo "$MANIFEST_TREE" | grep -q "com.scluzlep.fxplusmodule.XposedService"
           echo "$MANIFEST_TREE" | grep -q "rikka.shizuku.ShizukuProvider"
           echo "$MANIFEST_TREE" | grep -q "com.scluzlep.fxplusmodule.shizuku.FxStorageBridgeProvider"
           echo "$MANIFEST_TREE" | grep -q "moe.shizuku.manager.permission.API_V23"
           echo "$MANIFEST_TREE" | grep -q "nextapp.fx"
+          if echo "$MANIFEST_TREE" | grep -q "android.intent.category.LAUNCHER"; then
+            echo "::error::Launcher activity category must not be present in release APK"
+            exit 1
+          fi
           if echo "$MANIFEST_TREE" | grep -q "xposedminversion"; then
             echo "::error::Legacy xposedminversion metadata present in release APK"
             exit 1
@@ -269,6 +271,9 @@ jobs:
               prop = prop_raw.decode("utf-8")
               assert "minApiVersion=102" in prop
               assert "targetApiVersion=102" in prop
+              assert "staticScope=true" in prop
+              assert "exceptionMode=protective" in prop
+              assert "autoHotReload=true" in prop
               init_raw = zf.read("META-INF/xposed/java_init.list")
               assert b"\r" not in init_raw
               assert init_raw.decode("utf-8").strip() == "com.scluzlep.fxplusmodule.xposed.FxPlusModule"

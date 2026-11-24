@@ -47,6 +47,8 @@ object ConfigContract {
     const val KEY_ENABLE_HARDWARE_GIF_PLAYBACK = "enable_hardware_gif_playback"
     const val KEY_UNLOCK_TEXT_PREVIEW_LIMITS = "unlock_text_preview_limits"
     const val KEY_ENABLE_ANDROID_DATA_ACCESS = "enable_android_data_access"
+    const val KEY_GOOGLE_DRIVE_CLIENT_ID = "google_drive_client_id"
+    const val KEY_GOOGLE_DRIVE_CLIENT_SECRET = "google_drive_client_secret"
     const val KEY_DEBUG_LOGGING = "debug_logging"
     const val KEY_UPDATED_AT_MS = "updated_at_ms"
 
@@ -89,5 +91,7 @@ object ConfigContract {
     const val DEFAULT_ENABLE_HARDWARE_GIF_PLAYBACK = true
     const val DEFAULT_UNLOCK_TEXT_PREVIEW_LIMITS = true
     const val DEFAULT_ENABLE_ANDROID_DATA_ACCESS = true
+    const val DEFAULT_GOOGLE_DRIVE_CLIENT_ID = ""
+    const val DEFAULT_GOOGLE_DRIVE_CLIENT_SECRET = ""
     const val DEFAULT_DEBUG_LOGGING = false
 }

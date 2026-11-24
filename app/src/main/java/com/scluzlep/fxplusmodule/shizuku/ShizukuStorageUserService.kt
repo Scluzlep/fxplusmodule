@@ -3,7 +3,6 @@ package com.scluzlep.fxplusmodule.shizuku
 import android.content.Context
 import android.os.Parcel
 import android.os.ParcelFileDescriptor
-import androidx.annotation.Keep
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -13,10 +12,8 @@ import kotlin.system.exitProcess
  * Shizuku UserService executing scoped filesystem operations strictly inside
  * `/storage/emulated/<userId>/Android/(data|obb)` or `/sdcard/Android/(data|obb)`.
  */
-@Keep
 class ShizukuStorageUserService() : IPrivilegedStorageService.Stub() {
 
-    @Keep
     constructor(@Suppress("UNUSED_PARAMETER") context: Context) : this()
 
     override fun onTransact(code: Int, data: Parcel, reply: Parcel?, flags: Int): Boolean {

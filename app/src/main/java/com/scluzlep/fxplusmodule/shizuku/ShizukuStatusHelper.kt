@@ -6,10 +6,6 @@ import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.os.IBinder
 import android.os.Looper
-import androidx.core.content.pm.PackageInfoCompat
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import rikka.shizuku.Shizuku
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -43,8 +39,9 @@ object ShizukuStatusHelper {
     @Volatile
     private var bindingInProgress: Boolean = false
 
-    private val _status = MutableStateFlow(ShizukuStatusSnapshot())
-    val status: StateFlow<ShizukuStatusSnapshot> = _status.asStateFlow()
+    @Volatile
+    var currentStatus: ShizukuStatusSnapshot = ShizukuStatusSnapshot()
+        private set
 
     private val binderReceivedListener = Shizuku.OnBinderReceivedListener {
         refresh("Shizuku 服务已连接")
@@ -102,7 +99,7 @@ object ShizukuStatusHelper {
         refresh()
     }
 
-    fun refresh(actionMessage: String = _status.value.statusMessage) {
+    fun refresh(actionMessage: String = currentStatus.statusMessage): ShizukuStatusSnapshot {
         val ctx = appContext
         val binderAlive = runCatching { Shizuku.pingBinder() }.getOrDefault(false)
         val installed = binderAlive || isShizukuInstalled(ctx)
@@ -129,7 +126,7 @@ object ShizukuStatusHelper {
             clearBoundService()
         }
 
-        _status.value = ShizukuStatusSnapshot(
+        val updated = ShizukuStatusSnapshot(
             shizukuInstalled = installed,
             binderAlive = binderAlive,
             permissionGranted = granted,
@@ -138,6 +135,8 @@ object ShizukuStatusHelper {
             serverVersion = version,
             statusMessage = actionMessage
         )
+        currentStatus = updated
+        return updated
     }
 
     fun requestPermission() {
@@ -261,7 +260,7 @@ object ShizukuStatusHelper {
         val versionCode = runCatching {
             @Suppress("DEPRECATION")
             val info = context.packageManager.getPackageInfo(context.packageName, 0)
-            PackageInfoCompat.getLongVersionCode(info).toInt()
+            info.longVersionCode.toInt()
         }.getOrDefault(1)
 
         return Shizuku.UserServiceArgs(

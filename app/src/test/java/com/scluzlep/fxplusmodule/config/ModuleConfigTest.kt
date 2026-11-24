@@ -1,5 +1,6 @@
 package com.scluzlep.fxplusmodule.config
 
+import android.content.SharedPreferences
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -28,6 +29,8 @@ class ModuleConfigTest {
         assertTrue(cfg.enableHardwareGifPlayback)
         assertTrue(cfg.unlockTextPreviewLimits)
         assertTrue(cfg.enableAndroidDataAccess)
+        assertEquals("", cfg.customGoogleDriveClientId)
+        assertEquals("", cfg.customGoogleDriveClientSecret)
         assertFalse(cfg.debugLogging)
     }
 
@@ -123,5 +126,147 @@ class ModuleConfigTest {
         val decoded = ModuleConfig.fromMap(ModuleConfig.toMap(newer))
         assertEquals(newer.sanitized(), decoded)
         assertEquals(PrefetchLimitMode.COUNT_ONLY, PrefetchLimitMode.fromString("invalid_mode"))
+    }
+
+    @Test
+    fun googleDriveOAuthFieldsTrimPersistAndCompareCorrectly() {
+        val raw = ModuleConfig(
+            customGoogleDriveClientId = "  123456-abc.apps.googleusercontent.com \n",
+            customGoogleDriveClientSecret = "\tsecret-xyz  ",
+            updatedAtMs = 3_000L
+        )
+        val clean = raw.sanitized()
+        assertEquals("123456-abc.apps.googleusercontent.com", clean.customGoogleDriveClientId)
+        assertEquals("secret-xyz", clean.customGoogleDriveClientSecret)
+
+        assertTrue(raw.sameSettingsAs(clean.copy(updatedAtMs = 9_000L)))
+        assertFalse(clean.sameSettingsAs(clean.copy(customGoogleDriveClientId = "other-id")))
+        assertFalse(clean.sameSettingsAs(clean.copy(customGoogleDriveClientSecret = "other-secret")))
+
+        val mapRoundTrip = ModuleConfig.fromMap(ModuleConfig.toMap(raw))
+        assertEquals(clean, mapRoundTrip)
+
+        val prefs = InMemorySharedPreferences()
+        assertTrue(ModuleConfig.saveToSharedPreferences(prefs, raw, commitSync = true))
+        assertEquals(
+            "123456-abc.apps.googleusercontent.com",
+            prefs.getString(ConfigContract.KEY_GOOGLE_DRIVE_CLIENT_ID, "")
+        )
+        assertEquals(
+            "secret-xyz",
+            prefs.getString(ConfigContract.KEY_GOOGLE_DRIVE_CLIENT_SECRET, "")
+        )
+
+        val restored = ModuleConfig.fromSharedPreferences(prefs)
+        assertEquals(clean, restored)
+    }
+
+    private class InMemorySharedPreferences : SharedPreferences {
+        private val data = linkedMapOf<String, Any?>()
+
+        override fun getAll(): MutableMap<String, *> = LinkedHashMap(data)
+
+        override fun getString(key: String?, defValue: String?): String? {
+            return (data[key] as? String) ?: defValue
+        }
+
+        @Suppress("UNCHECKED_CAST")
+        override fun getStringSet(key: String?, defValues: MutableSet<String>?): MutableSet<String>? {
+            return (data[key] as? Set<String>)?.toMutableSet() ?: defValues
+        }
+
+        override fun getInt(key: String?, defValue: Int): Int {
+            return (data[key] as? Int) ?: defValue
+        }
+
+        override fun getLong(key: String?, defValue: Long): Long {
+            return (data[key] as? Long) ?: defValue
+        }
+
+        override fun getFloat(key: String?, defValue: Float): Float {
+            return (data[key] as? Float) ?: defValue
+        }
+
+        override fun getBoolean(key: String?, defValue: Boolean): Boolean {
+            return (data[key] as? Boolean) ?: defValue
+        }
+
+        override fun contains(key: String?): Boolean = data.containsKey(key)
+
+        override fun edit(): SharedPreferences.Editor = EditorImpl()
+
+        override fun registerOnSharedPreferenceChangeListener(
+            listener: SharedPreferences.OnSharedPreferenceChangeListener?
+        ) = Unit
+
+        override fun unregisterOnSharedPreferenceChangeListener(
+            listener: SharedPreferences.OnSharedPreferenceChangeListener?
+        ) = Unit
+
+        private inner class EditorImpl : SharedPreferences.Editor {
+            private val pending = linkedMapOf<String, Any?>()
+            private var clearAll = false
+
+            override fun putString(key: String?, value: String?): SharedPreferences.Editor {
+                if (key != null) pending[key] = value
+                return this
+            }
+
+            override fun putStringSet(
+                key: String?,
+                values: MutableSet<String>?
+            ): SharedPreferences.Editor {
+                if (key != null) pending[key] = values?.toSet()
+                return this
+            }
+
+            override fun putInt(key: String?, value: Int): SharedPreferences.Editor {
+                if (key != null) pending[key] = value
+                return this
+            }
+
+            override fun putLong(key: String?, value: Long): SharedPreferences.Editor {
+                if (key != null) pending[key] = value
+                return this
+            }
+
+            override fun putFloat(key: String?, value: Float): SharedPreferences.Editor {
+                if (key != null) pending[key] = value
+                return this
+            }
+
+            override fun putBoolean(key: String?, value: Boolean): SharedPreferences.Editor {
+                if (key != null) pending[key] = value
+                return this
+            }
+
+            override fun remove(key: String?): SharedPreferences.Editor {
+                if (key != null) pending[key] = null
+                return this
+            }
+
+            override fun clear(): SharedPreferences.Editor {
+                clearAll = true
+                return this
+            }
+
+            override fun commit(): Boolean {
+                apply()
+                return true
+            }
+
+            override fun apply() {
+                if (clearAll) {
+                    data.clear()
+                }
+                for ((key, value) in pending) {
+                    if (value == null) {
+                        data.remove(key)
+                    } else {
+                        data[key] = value
+                    }
+                }
+            }
+        }
     }
 }
