@@ -18,6 +18,7 @@ object ShizukuBridgeContract {
     )
 
     const val METHOD_PING = "ping"
+    const val METHOD_REQUEST_PERMISSION = "request_permission"
     const val METHOD_LIST = "list"
     const val METHOD_STAT = "stat"
     const val METHOD_MKDIRS = "mkdirs"
@@ -34,6 +35,7 @@ object ShizukuBridgeContract {
     const val KEY_ENTRIES_JSON = "entries_json"
     const val KEY_STAT_JSON = "stat_json"
     const val KEY_RESULT = "result"
+    const val KEY_SHIZUKU_INSTALLED = "shizuku_installed"
     const val KEY_SHIZUKU_AVAILABLE = "shizuku_available"
     const val KEY_SHIZUKU_GRANTED = "shizuku_granted"
     const val KEY_SERVICE_BOUND = "service_bound"

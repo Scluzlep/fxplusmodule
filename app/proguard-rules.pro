@@ -1,9 +1,10 @@
-# libxposed API 102 keep rules
--dontwarn io.github.libxposed.annotation.**
+# libxposed API 102 & stability-first R8 dead-code-removal rules
+-dontobfuscate
+-dontoptimize
+-keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod,SourceFile,LineNumberTable
+-dontwarn io.github.libxposed.**
 -adaptresourcefilecontents META-INF/xposed/java_init.list
--keep,allowoptimization,allowobfuscation public class * extends io.github.libxposed.api.XposedModule {
-    public <init>();
-}
--keep class com.scluzlep.fxplusmodule.xposed.ModuleStatus { *; }
--keep class com.scluzlep.fxplusmodule.config.** { *; }
--keep class com.scluzlep.fxplusmodule.shizuku.** { *; }
+
+-keep class com.scluzlep.fxplusmodule.** { *; }
+-keep class rikka.shizuku.** { *; }
+-keep class moe.shizuku.** { *; }

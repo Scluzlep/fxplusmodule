@@ -1,12 +1,10 @@
 package com.scluzlep.fxplusmodule.config
 
-import android.content.Context
 import android.content.SharedPreferences
-import com.scluzlep.fxplusmodule.xposed.ModuleStatus
 
 /**
- * Immutable module configuration shared between the standalone control app,
- * libxposed RemotePreferences("fxplusmodule"), and FX's in-process local mirror.
+ * Immutable module configuration persisted in FX's in-process
+ * `SharedPreferences("fxplusmodule_local", MODE_PRIVATE)`.
  */
 data class ModuleConfig(
     val unlockLargeImageSwipe: Boolean = ConfigContract.DEFAULT_UNLOCK_LARGE_IMAGE_SWIPE,
@@ -25,6 +23,8 @@ data class ModuleConfig(
     val enableHardwareGifPlayback: Boolean = ConfigContract.DEFAULT_ENABLE_HARDWARE_GIF_PLAYBACK,
     val unlockTextPreviewLimits: Boolean = ConfigContract.DEFAULT_UNLOCK_TEXT_PREVIEW_LIMITS,
     val enableAndroidDataAccess: Boolean = ConfigContract.DEFAULT_ENABLE_ANDROID_DATA_ACCESS,
+    val customGoogleDriveClientId: String = ConfigContract.DEFAULT_GOOGLE_DRIVE_CLIENT_ID,
+    val customGoogleDriveClientSecret: String = ConfigContract.DEFAULT_GOOGLE_DRIVE_CLIENT_SECRET,
     val debugLogging: Boolean = ConfigContract.DEFAULT_DEBUG_LOGGING,
     val updatedAtMs: Long = 0L
 ) {
@@ -48,6 +48,8 @@ data class ModuleConfig(
         maxRemoteThumbnailSizeMb = maxRemoteThumbnailSizeMb.coerceAtLeast(
             ConfigContract.MIN_MAX_REMOTE_THUMBNAIL_SIZE_MB
         ),
+        customGoogleDriveClientId = customGoogleDriveClientId.trim(),
+        customGoogleDriveClientSecret = customGoogleDriveClientSecret.trim(),
         updatedAtMs = updatedAtMs.coerceAtLeast(0L)
     )
 
@@ -113,6 +115,8 @@ data class ModuleConfig(
             a.enableHardwareGifPlayback == b.enableHardwareGifPlayback &&
             a.unlockTextPreviewLimits == b.unlockTextPreviewLimits &&
             a.enableAndroidDataAccess == b.enableAndroidDataAccess &&
+            a.customGoogleDriveClientId == b.customGoogleDriveClientId &&
+            a.customGoogleDriveClientSecret == b.customGoogleDriveClientSecret &&
             a.debugLogging == b.debugLogging
     }
 
@@ -194,6 +198,12 @@ data class ModuleConfig(
                     values[ConfigContract.KEY_ENABLE_ANDROID_DATA_ACCESS],
                     ConfigContract.DEFAULT_ENABLE_ANDROID_DATA_ACCESS
                 ),
+                customGoogleDriveClientId = values[ConfigContract.KEY_GOOGLE_DRIVE_CLIENT_ID]
+                    ?.toString()
+                    ?: ConfigContract.DEFAULT_GOOGLE_DRIVE_CLIENT_ID,
+                customGoogleDriveClientSecret = values[ConfigContract.KEY_GOOGLE_DRIVE_CLIENT_SECRET]
+                    ?.toString()
+                    ?: ConfigContract.DEFAULT_GOOGLE_DRIVE_CLIENT_SECRET,
                 debugLogging = readBool(
                     values[ConfigContract.KEY_DEBUG_LOGGING],
                     ConfigContract.DEFAULT_DEBUG_LOGGING
@@ -224,6 +234,8 @@ data class ModuleConfig(
                 ConfigContract.KEY_ENABLE_HARDWARE_GIF_PLAYBACK to clean.enableHardwareGifPlayback,
                 ConfigContract.KEY_UNLOCK_TEXT_PREVIEW_LIMITS to clean.unlockTextPreviewLimits,
                 ConfigContract.KEY_ENABLE_ANDROID_DATA_ACCESS to clean.enableAndroidDataAccess,
+                ConfigContract.KEY_GOOGLE_DRIVE_CLIENT_ID to clean.customGoogleDriveClientId,
+                ConfigContract.KEY_GOOGLE_DRIVE_CLIENT_SECRET to clean.customGoogleDriveClientSecret,
                 ConfigContract.KEY_DEBUG_LOGGING to clean.debugLogging,
                 ConfigContract.KEY_UPDATED_AT_MS to clean.updatedAtMs
             )
@@ -313,6 +325,16 @@ data class ModuleConfig(
                     ConfigContract.KEY_ENABLE_ANDROID_DATA_ACCESS,
                     ConfigContract.DEFAULT_ENABLE_ANDROID_DATA_ACCESS
                 ),
+                customGoogleDriveClientId = readPrefString(
+                    prefs,
+                    ConfigContract.KEY_GOOGLE_DRIVE_CLIENT_ID,
+                    ConfigContract.DEFAULT_GOOGLE_DRIVE_CLIENT_ID
+                ),
+                customGoogleDriveClientSecret = readPrefString(
+                    prefs,
+                    ConfigContract.KEY_GOOGLE_DRIVE_CLIENT_SECRET,
+                    ConfigContract.DEFAULT_GOOGLE_DRIVE_CLIENT_SECRET
+                ),
                 debugLogging = readPrefBool(
                     prefs,
                     ConfigContract.KEY_DEBUG_LOGGING,
@@ -348,6 +370,8 @@ data class ModuleConfig(
                 .putBoolean(ConfigContract.KEY_ENABLE_HARDWARE_GIF_PLAYBACK, clean.enableHardwareGifPlayback)
                 .putBoolean(ConfigContract.KEY_UNLOCK_TEXT_PREVIEW_LIMITS, clean.unlockTextPreviewLimits)
                 .putBoolean(ConfigContract.KEY_ENABLE_ANDROID_DATA_ACCESS, clean.enableAndroidDataAccess)
+                .putString(ConfigContract.KEY_GOOGLE_DRIVE_CLIENT_ID, clean.customGoogleDriveClientId)
+                .putString(ConfigContract.KEY_GOOGLE_DRIVE_CLIENT_SECRET, clean.customGoogleDriveClientSecret)
                 .putBoolean(ConfigContract.KEY_DEBUG_LOGGING, clean.debugLogging)
                 .putLong(ConfigContract.KEY_UPDATED_AT_MS, clean.updatedAtMs)
         }
@@ -416,58 +440,4 @@ data class ModuleConfig(
             }
         }
     }
-}
-
-/**
- * Persistence helper for the standalone app. Mirrors configuration between local
- * private SharedPreferences and libxposed RemotePreferences("fxplusmodule").
- */
-class ModuleConfigStore(context: Context) {
-    private val localPrefs: SharedPreferences = context.applicationContext.getSharedPreferences(
-        ConfigContract.PREFS_NAME_LOCAL,
-        Context.MODE_PRIVATE
-    )
-    private val lock = Any()
-
-    data class SaveResult(
-        val config: ModuleConfig,
-        val syncedToRemote: Boolean
-    )
-
-    fun load(): ModuleConfig = synchronized(lock) {
-        val local = ModuleConfig.fromSharedPreferences(localPrefs)
-        val remotePrefs = ModuleStatus.getRemotePreferences(ConfigContract.PREFS_NAME_REMOTE)
-            ?: return local
-        val remote = runCatching { ModuleConfig.fromSharedPreferences(remotePrefs) }.getOrNull()
-            ?: return local
-
-        val merged = ModuleConfig.mergeByTimestamp(local, remote)
-        if (remote.updatedAtMs > local.updatedAtMs) {
-            ModuleConfig.saveToSharedPreferences(localPrefs, merged, commitSync = true)
-        } else if (local.updatedAtMs > remote.updatedAtMs) {
-            runCatching {
-                ModuleConfig.saveToSharedPreferences(remotePrefs, merged, commitSync = true)
-            }
-        }
-        return merged
-    }
-
-    fun save(config: ModuleConfig): SaveResult = synchronized(lock) {
-        val current = load()
-        val stamped = config.withMonotonicTimestamp(
-            previousMs = maxOf(current.updatedAtMs, config.updatedAtMs)
-        )
-        ModuleConfig.saveToSharedPreferences(localPrefs, stamped, commitSync = true)
-        val remotePrefs = ModuleStatus.getRemotePreferences(ConfigContract.PREFS_NAME_REMOTE)
-        val synced = if (remotePrefs != null) {
-            runCatching {
-                ModuleConfig.saveToSharedPreferences(remotePrefs, stamped, commitSync = true)
-            }.getOrDefault(false)
-        } else {
-            false
-        }
-        SaveResult(config = stamped, syncedToRemote = synced)
-    }
-
-    fun syncWithRemoteIfBound(): ModuleConfig = load()
 }

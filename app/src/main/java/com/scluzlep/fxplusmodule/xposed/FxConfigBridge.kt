@@ -8,9 +8,8 @@ import io.github.libxposed.api.XposedModule
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
- * Bridges libxposed `RemotePreferences("fxplusmodule")` and FX-local
- * `SharedPreferences("fxplusmodule_local", MODE_PRIVATE)` inside `nextapp.fx`,
- * resolving conflicts deterministically by monotonic `updatedAtMs`.
+ * Manages FX-local `SharedPreferences("fxplusmodule_local", MODE_PRIVATE)` inside `nextapp.fx`,
+ * notifying live listeners when settings change.
  */
 object FxConfigBridge {
 
@@ -22,45 +21,16 @@ object FxConfigBridge {
         private set
 
     @Volatile
-    private var remotePrefs: SharedPreferences? = null
-
-    @Volatile
     private var localPrefs: SharedPreferences? = null
 
     @Volatile
-    private var remoteConfig: ModuleConfig = ModuleConfig()
-
-    @Volatile
     private var localConfig: ModuleConfig = ModuleConfig()
-
-    private val remoteListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
-        reloadRemoteLocked()
-    }
 
     private val localListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
         reloadLocalLocked()
     }
 
-    fun initRemote(module: XposedModule) {
-        val prefs = runCatching {
-            module.getRemotePreferences(ConfigContract.PREFS_NAME_REMOTE)
-        }.getOrNull() ?: return
-
-        val transition: Pair<ModuleConfig, ModuleConfig>
-        synchronized(lock) {
-            if (remotePrefs !== prefs) {
-                runCatching { remotePrefs?.unregisterOnSharedPreferenceChangeListener(remoteListener) }
-                remotePrefs = prefs
-                runCatching { prefs.registerOnSharedPreferenceChangeListener(remoteListener) }
-            }
-            remoteConfig = runCatching { ModuleConfig.fromSharedPreferences(prefs) }
-                .getOrDefault(ModuleConfig())
-            transition = recomputeLocked()
-        }
-        if (transition.first != transition.second) {
-            notifyListeners(transition.first, transition.second)
-        }
-    }
+    fun initRemote(@Suppress("UNUSED_PARAMETER") module: XposedModule) = Unit
 
     fun attachContext(context: Context) {
         val appCtx = context.applicationContext ?: context
@@ -75,8 +45,11 @@ object FxConfigBridge {
                 localPrefs = prefs
                 runCatching { prefs.registerOnSharedPreferenceChangeListener(localListener) }
             }
-            localConfig = ModuleConfig.fromSharedPreferences(prefs)
-            transition = recomputeLocked()
+            val loaded = ModuleConfig.fromSharedPreferences(prefs)
+            localConfig = loaded
+            val previous = current
+            current = loaded
+            transition = previous to loaded
         }
         if (transition.first != transition.second) {
             notifyListeners(transition.first, transition.second)
@@ -91,7 +64,7 @@ object FxConfigBridge {
             previous = current
             val candidate = transform(previous)
             val stamp = ModuleConfig.nextTimestamp(
-                previousMs = maxOf(previous.updatedAtMs, remoteConfig.updatedAtMs, localConfig.updatedAtMs)
+                previousMs = maxOf(previous.updatedAtMs, localConfig.updatedAtMs)
             )
             updated = candidate.sanitized().copy(updatedAtMs = stamp)
             localConfig = updated
@@ -116,51 +89,26 @@ object FxConfigBridge {
 
     fun detach() {
         synchronized(lock) {
-            runCatching { remotePrefs?.unregisterOnSharedPreferenceChangeListener(remoteListener) }
             runCatching { localPrefs?.unregisterOnSharedPreferenceChangeListener(localListener) }
-            remotePrefs = null
             localPrefs = null
         }
         listeners.clear()
-    }
-
-    private fun reloadRemoteLocked() {
-        val transition: Pair<ModuleConfig, ModuleConfig>
-        synchronized(lock) {
-            val prefs = remotePrefs ?: return
-            remoteConfig = runCatching { ModuleConfig.fromSharedPreferences(prefs) }
-                .getOrDefault(remoteConfig)
-            transition = recomputeLocked()
-        }
-        if (transition.first != transition.second) {
-            notifyListeners(transition.first, transition.second)
-        }
     }
 
     private fun reloadLocalLocked() {
         val transition: Pair<ModuleConfig, ModuleConfig>
         synchronized(lock) {
             val prefs = localPrefs ?: return
-            localConfig = runCatching { ModuleConfig.fromSharedPreferences(prefs) }
+            val loaded = runCatching { ModuleConfig.fromSharedPreferences(prefs) }
                 .getOrDefault(localConfig)
-            transition = recomputeLocked()
+            localConfig = loaded
+            val previous = current
+            current = loaded
+            transition = previous to loaded
         }
         if (transition.first != transition.second) {
             notifyListeners(transition.first, transition.second)
         }
-    }
-
-    private fun recomputeLocked(): Pair<ModuleConfig, ModuleConfig> {
-        val merged = ModuleConfig.mergeByTimestamp(remoteConfig, localConfig)
-        if (remoteConfig.updatedAtMs > localConfig.updatedAtMs) {
-            localConfig = merged
-            localPrefs?.let { prefs ->
-                runCatching { ModuleConfig.saveToSharedPreferences(prefs, merged, commitSync = false) }
-            }
-        }
-        val previous = current
-        current = merged
-        return previous to merged
     }
 
     private fun notifyListeners(oldConfig: ModuleConfig, newConfig: ModuleConfig) {
