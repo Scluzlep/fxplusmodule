@@ -139,8 +139,13 @@ object FxSettingsInjectorHook {
         } else {
             "预加载关"
         }
+        val hwRender = if (cfg.disableSoftwareImageRendering || cfg.enableHardwareGifPlayback) {
+            "看图硬解开"
+        } else {
+            "看图硬解关"
+        }
         val dataAccess = if (cfg.enableAndroidDataAccess) "目录增强开" else "目录增强关"
-        return "$swipe · $prefetch · $dataAccess"
+        return "$swipe · $prefetch · $hwRender · $dataAccess"
     }
 
     private data class DialogPalette(
@@ -435,6 +440,26 @@ object FxSettingsInjectorHook {
                 checked = cfg.highResThumbnails,
                 enabled = cfg.enableRemoteThumbnails
             ) { checked -> commitUpdate { it.copy(highResThumbnails = checked) } }
+
+            addDivider(activity, container, palette)
+            addSectionTitle(activity, container, "看图与动图渲染", palette)
+
+            addSwitchRow(
+                activity, container, palette,
+                title = "禁用大图软件渲染",
+                summary = "强制硬件加速直绘，超长与超高像素原图自动分块",
+                checked = cfg.disableSoftwareImageRendering
+            ) { checked -> commitUpdate { it.copy(disableSoftwareImageRendering = checked) } }
+
+            addSwitchRow(
+                activity, container, palette,
+                title = "动图硬件加速重绘",
+                summary = "使用系统硬件解码播放 GIF，修复发糊与掉帧",
+                checked = cfg.enableHardwareGifPlayback
+            ) { checked -> commitUpdate { it.copy(enableHardwareGifPlayback = checked) } }
+
+            addDivider(activity, container, palette)
+            addSectionTitle(activity, container, "目录与体验增强", palette)
 
             addSwitchRow(
                 activity, container, palette,

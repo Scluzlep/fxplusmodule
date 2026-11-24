@@ -43,6 +43,8 @@ object ConfigContract {
     const val KEY_ENABLE_REMOTE_THUMBNAILS = "enable_remote_thumbnails"
     const val KEY_MAX_REMOTE_THUMBNAIL_SIZE_MB = "max_remote_thumbnail_size_mb"
     const val KEY_HIGH_RES_THUMBNAILS = "high_res_thumbnails"
+    const val KEY_DISABLE_SOFTWARE_IMAGE_RENDERING = "disable_software_image_rendering"
+    const val KEY_ENABLE_HARDWARE_GIF_PLAYBACK = "enable_hardware_gif_playback"
     const val KEY_UNLOCK_TEXT_PREVIEW_LIMITS = "unlock_text_preview_limits"
     const val KEY_ENABLE_ANDROID_DATA_ACCESS = "enable_android_data_access"
     const val KEY_DEBUG_LOGGING = "debug_logging"
@@ -83,6 +85,8 @@ object ConfigContract {
     val MAX_REMOTE_THUMBNAIL_SIZE_MB_PRESETS = listOf(0, 16, 32, 64, 128, 256)
 
     const val DEFAULT_HIGH_RES_THUMBNAILS = false
+    const val DEFAULT_DISABLE_SOFTWARE_IMAGE_RENDERING = true
+    const val DEFAULT_ENABLE_HARDWARE_GIF_PLAYBACK = true
     const val DEFAULT_UNLOCK_TEXT_PREVIEW_LIMITS = true
     const val DEFAULT_ENABLE_ANDROID_DATA_ACCESS = true
     const val DEFAULT_DEBUG_LOGGING = false

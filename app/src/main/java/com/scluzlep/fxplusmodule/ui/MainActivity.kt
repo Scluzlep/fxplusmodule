@@ -407,6 +407,30 @@ private fun MainScreenContent(
         }
 
         SmallTitle(
+            text = "看图与动图渲染",
+            insideMargin = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+        )
+        Card(modifier = Modifier.fillMaxWidth()) {
+            SuperSwitch(
+                checked = config.disableSoftwareImageRendering,
+                onCheckedChange = { checked ->
+                    onUpdateConfig { it.copy(disableSoftwareImageRendering = checked) }
+                },
+                title = "禁用大图软件渲染",
+                summary = "强制硬件加速直绘，超长与超高像素原图自动分块"
+            )
+            SectionDivider()
+            SuperSwitch(
+                checked = config.enableHardwareGifPlayback,
+                onCheckedChange = { checked ->
+                    onUpdateConfig { it.copy(enableHardwareGifPlayback = checked) }
+                },
+                title = "动图硬件加速重绘",
+                summary = "使用系统硬件解码播放 GIF，修复发糊与掉帧"
+            )
+        }
+
+        SmallTitle(
             text = "Android/data 与 obb 访问增强",
             insideMargin = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
         )

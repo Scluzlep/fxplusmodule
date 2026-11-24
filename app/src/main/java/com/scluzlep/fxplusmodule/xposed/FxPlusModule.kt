@@ -66,6 +66,7 @@ class FxPlusModule : XposedModule() {
         configListener = null
         FxConfigBridge.detach()
         ViewerPrefetchHook.clearTransientStateOnHotReload()
+        FolderCacheLifecycleHook.clearOnHotReload()
         PrefetchCacheManager.shutdownShared()
         PrivilegedStorageClient.resetOnHotReload()
         param.setSavedInstanceState(currentPackageName.ifBlank { null })
@@ -199,6 +200,7 @@ class FxPlusModule : XposedModule() {
 
         SiblingSwipeHook.install(symbols, installer)
         ViewerPrefetchHook.install(symbols, installer)
+        FolderCacheLifecycleHook.install(symbols, installer)
         RemoteThumbnailHook.install(symbols, installer)
         AndroidDataAccessHook.install(symbols, installer)
         FxSettingsInjectorHook.install(symbols, installer)

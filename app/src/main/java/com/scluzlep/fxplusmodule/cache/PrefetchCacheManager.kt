@@ -31,10 +31,21 @@ data class PrefetchItem(
     val sizeBytes: Long,
     val mimeType: String? = null,
     val isRemote: Boolean = true,
-    val opener: (() -> InputStream?)? = null
+    val opener: (() -> InputStream?)? = null,
+    val folderKey: String = defaultFolderKey(catalogIdentity, path)
 ) {
     val cacheKey: String by lazy {
         PrefetchCacheManager.computeCacheKey(catalogIdentity, path, lastModifiedMs, sizeBytes)
+    }
+
+    val folderHash: String by lazy {
+        PrefetchCacheManager.computeFolderHash(folderKey)
+    }
+
+    companion object {
+        fun defaultFolderKey(catalogIdentity: String, path: String): String {
+            return "$catalogIdentity|${path.substringBeforeLast('/', "")}"
+        }
     }
 }
 
@@ -81,6 +92,7 @@ class PrefetchCacheManager(
 
     private class InFlightDownload(
         val key: String,
+        val folderHash: String,
         val generation: Long,
         val future: CompletableFuture<File?>
     ) {
@@ -110,6 +122,7 @@ class PrefetchCacheManager(
 
     private val inFlight = ConcurrentHashMap<String, InFlightDownload>()
     private val accessOrder = ConcurrentHashMap<String, Long>()
+    private val keyToFolderHash = ConcurrentHashMap<String, String>()
     private val accessClock = AtomicLong(0L)
     private val generationCounter = AtomicLong(0L)
     private val activeSession = AtomicReference<String?>(null)
@@ -153,15 +166,27 @@ class PrefetchCacheManager(
     }
 
     fun peekCachedFile(item: PrefetchItem): File? {
-        return peekCachedFileByKey(item.cacheKey, item.sizeBytes)
+        val hash = item.folderHash
+        keyToFolderHash[item.cacheKey] = hash
+        return peekCachedFileInternal(item.cacheKey, item.sizeBytes, hash)
     }
 
     fun peekCachedFileByKey(key: String, expectedSizeBytes: Long): File? {
-        val file = binFileForKey(key)
+        return peekCachedFileInternal(key, expectedSizeBytes, knownFolderHash = null)
+    }
+
+    private fun peekCachedFileInternal(
+        key: String,
+        expectedSizeBytes: Long,
+        knownFolderHash: String?
+    ): File? {
+        val file = binFileForKey(key, knownFolderHash)
         if (!file.exists() || !file.isFile) return null
         val len = file.length()
         if (len <= 0L || (expectedSizeBytes > 0L && len != expectedSizeBytes)) {
             runCatching { file.delete() }
+            accessOrder.remove(key)
+            keyToFolderHash.remove(key)
             return null
         }
         touchEntry(key, file)
@@ -177,6 +202,8 @@ class PrefetchCacheManager(
         peekCachedFile(item)?.let { return it }
 
         val key = item.cacheKey
+        val folderHash = item.folderHash
+        keyToFolderHash[key] = folderHash
         val existing = inFlight[key]
         if (existing != null && !existing.cancelled.get()) {
             existing.foregroundWaiters.incrementAndGet()
@@ -192,7 +219,7 @@ class PrefetchCacheManager(
         val opener = openerOverride ?: item.opener ?: return null
         val gen = generationCounter.get()
         val future = CompletableFuture<File?>()
-        val entry = InFlightDownload(key, gen, future)
+        val entry = InFlightDownload(key, folderHash, gen, future)
 
         val prev = inFlight.putIfAbsent(key, entry)
         if (prev != null && !prev.cancelled.get()) {
@@ -386,6 +413,7 @@ class PrefetchCacheManager(
                     totalBytes = (totalBytes - fileSize).coerceAtLeast(0L)
                     totalEntries = (totalEntries - 1).coerceAtLeast(0)
                     accessOrder.remove(key)
+                    keyToFolderHash.remove(key)
                 }
             }
         }
@@ -395,7 +423,76 @@ class PrefetchCacheManager(
         inFlight[key]?.forceCancel()
         synchronized(ioLock) {
             accessOrder.remove(key)
-            runCatching { binFileForKey(key).delete() }
+            val knownHash = keyToFolderHash.remove(key)
+            runCatching { binFileForKey(key, knownHash).delete() }
+            cacheRoot.listFiles()?.forEach { file ->
+                if (file.isFile && (file.name == "$key.bin" || file.name.endsWith("_$key.bin"))) {
+                    runCatching { file.delete() }
+                }
+            }
+        }
+    }
+
+    fun evictFolder(folderKey: String): Set<String> {
+        if (folderKey.isBlank()) return emptySet()
+        val targetHash = computeFolderHash(folderKey)
+        return evictWhere { hash -> hash != null && hash == targetHash }
+    }
+
+    fun retainOnlyFolders(activeFolderKeys: Set<String>): Set<String> {
+        val activeHashes = activeFolderKeys
+            .filter { it.isNotBlank() }
+            .mapTo(HashSet()) { computeFolderHash(it) }
+        return evictWhere { hash -> hash == null || hash !in activeHashes }
+    }
+
+    private fun evictWhere(shouldEvictHash: (String?) -> Boolean): Set<String> {
+        val evictedKeys = LinkedHashSet<String>()
+
+        fun cancelMatchingInFlight() {
+            for ((key, entry) in inFlight) {
+                if (shouldEvictHash(entry.folderHash)) {
+                    entry.forceCancel()
+                    evictedKeys.add(key)
+                }
+            }
+        }
+
+        cancelMatchingInFlight()
+        synchronized(ioLock) {
+            cancelMatchingInFlight()
+            ensureCacheDir()
+            cacheRoot.listFiles()?.forEach { file ->
+                if (!file.isFile) return@forEach
+                val name = file.name
+                if (!isCacheFileName(name)) return@forEach
+                val hash = folderHashFromFileName(name)
+                if (shouldEvictHash(hash)) {
+                    val key = keyFromCacheFileName(name)
+                    runCatching { file.delete() }
+                    if (key != null) {
+                        evictedKeys.add(key)
+                    }
+                }
+            }
+            for ((key, hash) in keyToFolderHash) {
+                if (shouldEvictHash(hash)) {
+                    evictedKeys.add(key)
+                }
+            }
+            purgeTrackedKeys(evictedKeys)
+        }
+        return evictedKeys
+    }
+
+    private fun purgeTrackedKeys(evictedKeys: Set<String>) {
+        if (evictedKeys.isEmpty()) return
+        for (key in evictedKeys) {
+            accessOrder.remove(key)
+            keyToFolderHash.remove(key)
+        }
+        if (protectedKeys.isNotEmpty()) {
+            protectedKeys = protectedKeys - evictedKeys
         }
     }
 
@@ -403,6 +500,8 @@ class PrefetchCacheManager(
         cancelAllPending()
         synchronized(ioLock) {
             accessOrder.clear()
+            keyToFolderHash.clear()
+            protectedKeys = emptySet()
             cacheRoot.listFiles()?.forEach { file ->
                 if (file.isFile) {
                     runCatching { file.delete() }
@@ -445,11 +544,13 @@ class PrefetchCacheManager(
     private fun enqueueBackground(item: PrefetchItem, generation: Long, config: ModuleConfig) {
         val opener = item.opener ?: return
         val key = item.cacheKey
+        val folderHash = item.folderHash
+        keyToFolderHash[key] = folderHash
         val existing = inFlight[key]
         if (existing != null && !existing.cancelled.get()) return
 
         val future = CompletableFuture<File?>()
-        val entry = InFlightDownload(key, generation, future)
+        val entry = InFlightDownload(key, folderHash, generation, future)
         val prev = inFlight.putIfAbsent(key, entry)
         if (prev != null && !prev.cancelled.get()) return
         if (prev != null) {
@@ -489,7 +590,9 @@ class PrefetchCacheManager(
     ): File? {
         ensureCacheDir()
         val key = item.cacheKey
-        peekCachedFileByKey(key, item.sizeBytes)?.let { return it }
+        val folderHash = item.folderHash
+        keyToFolderHash[key] = folderHash
+        peekCachedFileInternal(key, item.sizeBytes, folderHash)?.let { return it }
 
         if (checkStorageGuard) {
             val usable = runCatching { storageSpaceProvider.usableBytes(cacheRoot) }.getOrDefault(0L)
@@ -506,7 +609,7 @@ class PrefetchCacheManager(
         } ?: return null
 
         entry.activeStream.set(stream)
-        val partFile = File(cacheRoot, "$key.part.${UUID.randomUUID().toString().substring(0, 8)}")
+        val partFile = File(cacheRoot, "${folderHash}_${key}.part.${UUID.randomUUID().toString().substring(0, 8)}")
         var succeeded = false
         var written = 0L
 
@@ -539,8 +642,11 @@ class PrefetchCacheManager(
                 return null
             }
 
-            val target = binFileForKey(key)
+            val target = binFileForKey(key, folderHash)
             synchronized(ioLock) {
+                if (entry.cancelled.get() || Thread.currentThread().isInterrupted || !partFile.exists()) {
+                    return null
+                }
                 if (target.exists() && target.length() == written) {
                     touchEntry(key, target)
                     succeeded = true
@@ -597,15 +703,32 @@ class PrefetchCacheManager(
     private fun touchEntry(key: String, file: File) {
         val clock = accessClock.incrementAndGet()
         accessOrder[key] = clock
+        folderHashFromFileName(file.name)?.let { keyToFolderHash[key] = it }
         runCatching { file.setLastModified(System.currentTimeMillis()) }
     }
 
-    private fun binFileForKey(key: String): File = File(cacheRoot, "$key.bin")
+    private fun binFileForKey(key: String, folderHash: String? = null): File {
+        val knownHash = folderHash ?: keyToFolderHash[key]
+        if (knownHash != null) {
+            return File(cacheRoot, "${knownHash}_$key.bin")
+        }
+        val existing = cacheRoot.listFiles()?.firstOrNull { file ->
+            file.isFile && file.name.endsWith("_$key.bin") && folderHashFromFileName(file.name) != null
+        }
+        if (existing != null) {
+            folderHashFromFileName(existing.name)?.let { keyToFolderHash[key] = it }
+            return existing
+        }
+        return File(cacheRoot, "$key.bin")
+    }
 
-    private fun keyFromFile(file: File): String = file.name.removeSuffix(".bin")
+    private fun keyFromFile(file: File): String {
+        return keyFromCacheFileName(file.name) ?: file.name.removeSuffix(".bin")
+    }
 
     companion object {
         private const val COPY_BUFFER_BYTES = 65_536
+        private const val FOLDER_HASH_HEX_LEN = 16
         const val MIN_PHYSICAL_FREE_BYTES = 512L * 1024L * 1024L
         const val CAPACITY_SCAN_MAX_DEPTH = 50
 
@@ -666,7 +789,14 @@ class PrefetchCacheManager(
             lastModifiedMs: Long,
             sizeBytes: Long
         ): String {
-            val raw = "$catalogIdentity|$path|$lastModifiedMs|$sizeBytes"
+            return sha256Hex("$catalogIdentity|$path|$lastModifiedMs|$sizeBytes")
+        }
+
+        fun computeFolderHash(folderKey: String): String {
+            return sha256Hex(folderKey).substring(0, FOLDER_HASH_HEX_LEN)
+        }
+
+        private fun sha256Hex(raw: String): String {
             val digest = MessageDigest.getInstance("SHA-256")
                 .digest(raw.toByteArray(Charsets.UTF_8))
             val hex = StringBuilder(digest.size * 2)
@@ -676,6 +806,37 @@ class PrefetchCacheManager(
                 hex.append(HEX_CHARS[v and 0x0F])
             }
             return hex.toString()
+        }
+
+        internal fun folderHashFromFileName(name: String): String? {
+            if (name.length <= FOLDER_HASH_HEX_LEN + 1 || name[FOLDER_HASH_HEX_LEN] != '_') {
+                return null
+            }
+            for (i in 0 until FOLDER_HASH_HEX_LEN) {
+                val c = name[i]
+                val isLowerHex = (c in '0'..'9') || (c in 'a'..'f')
+                if (!isLowerHex) return null
+            }
+            return name.substring(0, FOLDER_HASH_HEX_LEN)
+        }
+
+        private fun isCacheFileName(name: String): Boolean {
+            return name.endsWith(".bin") || name.endsWith(".part") || ".part." in name
+        }
+
+        private fun keyFromCacheFileName(name: String): String? {
+            val stem = when {
+                name.endsWith(".bin") -> name.removeSuffix(".bin")
+                ".part." in name -> name.substringBefore(".part.")
+                name.endsWith(".part") -> name.removeSuffix(".part")
+                else -> return null
+            }
+            if (stem.isEmpty()) return null
+            return if (folderHashFromFileName(name) != null) {
+                stem.substring(FOLDER_HASH_HEX_LEN + 1).ifEmpty { null }
+            } else {
+                stem
+            }
         }
 
         private fun isUnmeteredOrWifi(context: Context): Boolean {

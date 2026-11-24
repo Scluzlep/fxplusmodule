@@ -114,7 +114,13 @@ object FxDexContracts {
             "nextapp.fx.plus.dirimpl.ftp.e",
             "nextapp.fx.plus.dirimpl.ssh.g",
             "nextapp.fx.plus.dirimpl.googledrive.e",
-            "nextapp.fx.plus.dirimpl.onedrive.d"
+            "nextapp.fx.plus.dirimpl.onedrive.d",
+            "nextapp.fx.ui.ExplorerActivity",
+            "nextapp.fx.ui.content.r",
+            "nextapp.fx.ui.content.h0",
+            "nextapp.fx.ui.content.e2",
+            "nextapp.fx.ui.content.e0",
+            "v8.f"
         ).toList()
 
         val methods = listOf(
@@ -280,7 +286,29 @@ object FxDexContracts {
             DexMethodSpec("nextapp.fx.plus.dirimpl.smb.d", "j", "(Landroid/content/Context;)Ljava/io/InputStream;", false),
             DexMethodSpec("nextapp.fx.plus.dirimpl.smb.legacy.d", "j", "(Landroid/content/Context;)Ljava/io/InputStream;", false),
             DexMethodSpec("nextapp.fx.plus.dirimpl.webdav.c", "j", "(Landroid/content/Context;)Ljava/io/InputStream;", false),
-            DexMethodSpec("nextapp.fx.plus.dirimpl.ftp.e", "j", "(Landroid/content/Context;)Ljava/io/InputStream;", false)
+            DexMethodSpec("nextapp.fx.plus.dirimpl.ftp.e", "j", "(Landroid/content/Context;)Ljava/io/InputStream;", false),
+
+            // Hardware render & GIF v1.1 + Folder lifecycle
+            DexMethodSpec("nextapp.maui.ui.imageview.TouchImageDisplay", "g", "(Landroid/graphics/Bitmap;)V", false),
+            DexMethodSpec("nextapp.maui.ui.imageview.TouchImageDisplay", "w", "(IIZ)V", false),
+            DexMethodSpec("nextapp.maui.ui.imageview.TouchImageDisplay", "setImageNull", "()V", false),
+            DexMethodSpec("nextapp.maui.ui.imageview.TouchImageDisplay", "setPrescale", "(F)V", false),
+            DexMethodSpec("nextapp.maui.ui.imageview.TouchImageDisplay", "zoomFit", "()V", false),
+            DexMethodSpec("nextapp.maui.ui.imageview.TouchImageDisplay", "onDraw", "(Landroid/graphics/Canvas;)V", false),
+            DexMethodSpec("nextapp.maui.ui.imageview.TouchImageDisplay", "onDetachedFromWindow", "()V", false),
+            DexMethodSpec("nextapp.fx.ui.viewer.image.ImageDisplay", "U", "(Landroid/graphics/Bitmap;Z)V", false),
+            DexMethodSpec("nextapp.fx.ui.viewer.image.ImageDisplay", "V", "(Landroid/graphics/Movie;)V", false),
+            DexMethodSpec("nextapp.fx.ui.viewer.image.ImageDisplay", "W", "()V", false),
+            DexMethodSpec("nextapp.fx.ui.ExplorerActivity", "onResume", "()V", false),
+            DexMethodSpec("nextapp.fx.ui.ExplorerActivity", "onDestroy", "()V", false),
+            DexMethodSpec("nextapp.fx.ui.content.h0", "s", "(Lnextapp/fx/ui/content/e2;)V", false),
+            DexMethodSpec("nextapp.fx.ui.content.h0", "d", "()Ljava/util/Collection;", false),
+            DexMethodSpec("nextapp.fx.ui.content.e2", "s", "(Lse/f;)V", false),
+            DexMethodSpec("nextapp.fx.ui.content.e2", "c", "()Lnextapp/fx/ui/content/e0;", false),
+            DexMethodSpec("nextapp.fx.ui.content.e2", "getPath", "()Lse/f;", false),
+            DexMethodSpec("nextapp.fx.ui.content.e0", "getPath", "()Lse/f;", false),
+            DexMethodSpec("se.f", "C", "()Lse/f;", false),
+            DexMethodSpec("se.f", "g", "()[Ljava/lang/Object;", false)
         )
 
         val fields = listOf(
@@ -331,7 +359,32 @@ object FxDexContracts {
             DexFieldSpec("nextapp.fx.dirimpl.file.c", "f", "Lnextapp/fx/dirimpl/file/FileCatalog;", false),
             DexFieldSpec("nextapp.fx.dirimpl.file.c", "i", "Lse/f;", false),
             DexFieldSpec("nextapp.fx.dirimpl.file.c", "X", "Ljava/io/File;", false),
-            DexFieldSpec("nextapp.fx.dirimpl.file.c", "Y", "J", false)
+            DexFieldSpec("nextapp.fx.dirimpl.file.c", "Y", "J", false),
+
+            // Hardware render & GIF v1.1 + Folder lifecycle
+            DexFieldSpec("nextapp.maui.ui.imageview.TouchImageDisplay", "Q5", "Landroid/graphics/Bitmap;", false),
+            DexFieldSpec("nextapp.maui.ui.imageview.TouchImageDisplay", "R5", "Landroid/graphics/Movie;", false),
+            DexFieldSpec("nextapp.maui.ui.imageview.TouchImageDisplay", "S5", "Z", false),
+            DexFieldSpec("nextapp.maui.ui.imageview.TouchImageDisplay", "f", "Ljava/lang/Thread;", false),
+            DexFieldSpec("nextapp.maui.ui.imageview.TouchImageDisplay", "V5", "Landroid/graphics/Matrix;", false),
+            DexFieldSpec("nextapp.maui.ui.imageview.TouchImageDisplay", "H5", "Landroid/graphics/Paint;", false),
+            DexFieldSpec("nextapp.maui.ui.imageview.TouchImageDisplay", "f5", "F", false),
+            DexFieldSpec("nextapp.maui.ui.imageview.TouchImageDisplay", "c5", "Landroid/graphics/Rect;", false),
+            DexFieldSpec("nextapp.maui.ui.imageview.TouchImageDisplay", "h5", "Z", false),
+            DexFieldSpec("nextapp.maui.ui.imageview.TouchImageDisplay", "j5", "Lv8/f;", false),
+            DexFieldSpec("nextapp.maui.ui.imageview.TouchImageDisplay", "k5", "Lv8/f;", false),
+            DexFieldSpec("nextapp.maui.ui.imageview.TouchImageDisplay", "l5", "Z", false),
+            DexFieldSpec("nextapp.fx.ui.viewer.image.ImageDisplay", "a6", "Landroid/graphics/Bitmap;", false),
+            DexFieldSpec("nextapp.fx.ui.viewer.image.ImageDisplay", "b6", "Landroid/graphics/Movie;", false),
+            DexFieldSpec("nextapp.fx.ui.viewer.image.ImageDisplay", "f6", "Z", false),
+            DexFieldSpec("nextapp.fx.ui.viewer.image.ImageDisplay", "g6", "Z", false),
+            DexFieldSpec("nextapp.fx.ui.viewer.image.ImageDisplay", "h6", "Z", false),
+            DexFieldSpec("nextapp.fx.ui.viewer.image.ImageViewerActivity", "x5", "I", false),
+            DexFieldSpec("nextapp.fx.ui.viewer.image.ImageViewerActivity", "P5", "Z", false),
+            DexFieldSpec("nextapp.fx.ui.content.r", "r5", "Lnextapp/fx/ui/content/h0;", false),
+            DexFieldSpec("nextapp.fx.ui.content.h0", "f", "Ljava/util/List;", false),
+            DexFieldSpec("nextapp.fx.ui.content.e0", "Y", "Lse/f;", false),
+            DexFieldSpec("se.f", "f", "[Ljava/lang/Object;", false)
         )
 
         return VersionContract(ConfigContract.FX_VERSION_CODE_9012, classes, methods, fields)
@@ -408,7 +461,13 @@ object FxDexContracts {
             "bd.f",
             "jd.d",
             "cd.g",
-            "dd.e"
+            "dd.e",
+            "nextapp.fx.ui.ExplorerActivity",
+            "nextapp.fx.ui.content.k",
+            "nextapp.fx.ui.content.w",
+            "nextapp.fx.ui.content.c1",
+            "nextapp.fx.ui.content.p",
+            "pa.c"
         ).toList()
 
         val methods = listOf(
@@ -552,7 +611,22 @@ object FxDexContracts {
             // Remote FileItems
             DexMethodSpec("fd.j", "f", "(Landroid/content/Context;)Ljava/io/InputStream;", false),
             DexMethodSpec("hd.e", "f", "(Landroid/content/Context;)Ljava/io/InputStream;", false),
-            DexMethodSpec("bd.f", "f", "(Landroid/content/Context;)Ljava/io/InputStream;", false)
+            DexMethodSpec("bd.f", "f", "(Landroid/content/Context;)Ljava/io/InputStream;", false),
+
+            // Hardware render & GIF v1.1 + Folder lifecycle
+            DexMethodSpec("nextapp.maui.ui.imageview.TouchImageDisplay", "h", "(IIZ)V", false),
+            DexMethodSpec("nextapp.maui.ui.imageview.TouchImageDisplay", "setImageNull", "()V", false),
+            DexMethodSpec("nextapp.maui.ui.imageview.TouchImageDisplay", "setPrescale", "(F)V", false),
+            DexMethodSpec("nextapp.maui.ui.imageview.TouchImageDisplay", "zoomFit", "()V", false),
+            DexMethodSpec("nextapp.maui.ui.imageview.TouchImageDisplay", "onDraw", "(Landroid/graphics/Canvas;)V", false),
+            DexMethodSpec("nextapp.maui.ui.imageview.TouchImageDisplay", "onDetachedFromWindow", "()V", false),
+            DexMethodSpec("nextapp.fx.ui.viewer.image.ImageDisplay", "l", "()V", false),
+            DexMethodSpec("nextapp.fx.ui.ExplorerActivity", "onResume", "()V", false),
+            DexMethodSpec("nextapp.fx.ui.ExplorerActivity", "onDestroy", "()V", false),
+            DexMethodSpec("nextapp.fx.ui.content.w", "l", "(Lnextapp/fx/ui/content/c1;)V", false),
+            DexMethodSpec("nextapp.fx.ui.content.c1", "v", "(Lhh/f;)V", false),
+            DexMethodSpec("nextapp.fx.ui.content.c1", "g", "()Lnextapp/fx/ui/content/p;", false),
+            DexMethodSpec("hh.f", "G", "()Lhh/f;", false)
         )
 
         val fields = listOf(
@@ -627,7 +701,32 @@ object FxDexContracts {
             DexFieldSpec("ec.e", "f", "Lnextapp/fx/dirimpl/file/FileCatalog;", false),
             DexFieldSpec("ec.e", "i", "Lhh/f;", false),
             DexFieldSpec("ec.e", "X", "Ljava/io/File;", false),
-            DexFieldSpec("ec.e", "Y", "J", false)
+            DexFieldSpec("ec.e", "Y", "J", false),
+
+            // Hardware render & GIF v1.1 + Folder lifecycle
+            DexFieldSpec("nextapp.maui.ui.imageview.TouchImageDisplay", "N2", "Landroid/graphics/Bitmap;", false),
+            DexFieldSpec("nextapp.maui.ui.imageview.TouchImageDisplay", "O2", "Landroid/graphics/Movie;", false),
+            DexFieldSpec("nextapp.maui.ui.imageview.TouchImageDisplay", "P2", "Z", false),
+            DexFieldSpec("nextapp.maui.ui.imageview.TouchImageDisplay", "f", "Ljava/lang/Thread;", false),
+            DexFieldSpec("nextapp.maui.ui.imageview.TouchImageDisplay", "S2", "Landroid/graphics/Matrix;", false),
+            DexFieldSpec("nextapp.maui.ui.imageview.TouchImageDisplay", "E2", "Landroid/graphics/Paint;", false),
+            DexFieldSpec("nextapp.maui.ui.imageview.TouchImageDisplay", "c2", "F", false),
+            DexFieldSpec("nextapp.maui.ui.imageview.TouchImageDisplay", "Z1", "Landroid/graphics/Rect;", false),
+            DexFieldSpec("nextapp.maui.ui.imageview.TouchImageDisplay", "e2", "Z", false),
+            DexFieldSpec("nextapp.maui.ui.imageview.TouchImageDisplay", "g2", "Lpa/c;", false),
+            DexFieldSpec("nextapp.maui.ui.imageview.TouchImageDisplay", "h2", "Lpa/c;", false),
+            DexFieldSpec("nextapp.maui.ui.imageview.TouchImageDisplay", "i2", "Z", false),
+            DexFieldSpec("nextapp.fx.ui.viewer.image.ImageDisplay", "W2", "Landroid/graphics/Bitmap;", false),
+            DexFieldSpec("nextapp.fx.ui.viewer.image.ImageDisplay", "X2", "Landroid/graphics/Movie;", false),
+            DexFieldSpec("nextapp.fx.ui.viewer.image.ImageDisplay", "b3", "Z", false),
+            DexFieldSpec("nextapp.fx.ui.viewer.image.ImageDisplay", "c3", "Z", false),
+            DexFieldSpec("nextapp.fx.ui.viewer.image.ImageDisplay", "d3", "Z", false),
+            DexFieldSpec("nextapp.fx.ui.viewer.image.ImageViewerActivity", "t2", "I", false),
+            DexFieldSpec("nextapp.fx.ui.viewer.image.ImageViewerActivity", "L2", "Z", false),
+            DexFieldSpec("nextapp.fx.ui.content.k", "n2", "Lnextapp/fx/ui/content/w;", false),
+            DexFieldSpec("nextapp.fx.ui.content.w", "f", "Ljava/util/ArrayList;", false),
+            DexFieldSpec("nextapp.fx.ui.content.p", "Y", "Lhh/f;", false),
+            DexFieldSpec("hh.f", "f", "[Ljava/lang/Object;", false)
         )
 
         return VersionContract(ConfigContract.FX_VERSION_CODE_9108, classes, methods, fields)
@@ -690,6 +789,7 @@ data class SiblingBindings(
 data class ViewerPrefetchBindings(
     val viewerBaseClass: Class<*>?,
     val mirrorRemoteTempFile: Method?,
+    val viewerOnCreate: Method?,
     val viewerOnDestroy: Method?,
     val viewerLoadMediaAndBitmap: Method?,
     val viewerLoadMedia: Method?,
@@ -824,6 +924,22 @@ data class BonusLimitsBindings(
     val execUnsupportedField: Field?
 )
 
+data class FolderLifecycleBindings(
+    val explorerActivityClass: Class<*>?,
+    val explorerOnResume: Method?,
+    val explorerOnDestroy: Method?,
+    val windowManagerField: Field?,
+    val windowModelsField: Field?,
+    val windowModelCloseMethod: Method?,
+    val windowModelSetPathMethod: Method?,
+    val windowModelCurrentContentMethod: Method?,
+    val contentModelPathField: Field?,
+    val fxPathClass: Class<*>?,
+    val fxPathElementsField: Field?,
+    val fxPathParentMethod: Method?,
+    val dirCatalogClass: Class<*>?
+)
+
 data class ResolvedSymbols(
     val profile: FxProfile,
     val versionCode: Long,
@@ -833,7 +949,8 @@ data class ResolvedSymbols(
     val remoteThumb: RemoteThumbBindings,
     val settings: NativeSettingsBindings,
     val androidData: AndroidDataBindings,
-    val bonusLimits: BonusLimitsBindings
+    val bonusLimits: BonusLimitsBindings,
+    val folderLifecycle: FolderLifecycleBindings
 )
 
 /**
@@ -980,6 +1097,7 @@ object FxSymbolResolver {
         val viewer = ViewerPrefetchBindings(
             viewerBaseClass = viewerBaseClass,
             mirrorRemoteTempFile = declaredMethod(viewerBaseClass, "T", fileItemClass, Long::class.javaPrimitiveType),
+            viewerOnCreate = declaredMethod(viewerClass, "onCreate", android.os.Bundle::class.java),
             viewerOnDestroy = declaredMethod(viewerBaseClass, "onDestroy"),
             viewerLoadMediaAndBitmap = null,
             viewerLoadMedia = declaredMethod(viewerClass, "j1", imageDisplayClass, itemHolderClass, Int::class.javaPrimitiveType),
@@ -1150,6 +1268,28 @@ object FxSymbolResolver {
             execUnsupportedField = declaredField(execClass, "K5")
         )
 
+        val explorerActivityClass = loadClass(cl, "nextapp.fx.ui.ExplorerActivity")
+        val contentHostClass = loadClass(cl, "nextapp.fx.ui.content.r")
+        val windowManagerClass = loadClass(cl, "nextapp.fx.ui.content.h0")
+        val windowModelClass = loadClass(cl, "nextapp.fx.ui.content.e2")
+        val contentModelClass = loadClass(cl, "nextapp.fx.ui.content.e0")
+
+        val folderLifecycle = FolderLifecycleBindings(
+            explorerActivityClass = explorerActivityClass,
+            explorerOnResume = declaredMethod(explorerActivityClass, "onResume"),
+            explorerOnDestroy = declaredMethod(explorerActivityClass, "onDestroy"),
+            windowManagerField = declaredField(contentHostClass, "r5"),
+            windowModelsField = declaredField(windowManagerClass, "f"),
+            windowModelCloseMethod = declaredMethod(windowManagerClass, "s", windowModelClass),
+            windowModelSetPathMethod = declaredMethod(windowModelClass, "s", fxPathClass),
+            windowModelCurrentContentMethod = declaredMethod(windowModelClass, "c"),
+            contentModelPathField = declaredField(contentModelClass, "Y"),
+            fxPathClass = fxPathClass,
+            fxPathElementsField = declaredField(fxPathClass, "f"),
+            fxPathParentMethod = declaredMethod(fxPathClass, "C"),
+            dirCatalogClass = dirCatalogClass
+        )
+
         return ResolvedSymbols(
             profile = FxProfile.FX_9012,
             versionCode = versionCode,
@@ -1159,7 +1299,8 @@ object FxSymbolResolver {
             remoteThumb = remoteThumb,
             settings = settings,
             androidData = androidData,
-            bonusLimits = bonusLimits
+            bonusLimits = bonusLimits,
+            folderLifecycle = folderLifecycle
         )
     }
 
@@ -1249,6 +1390,7 @@ object FxSymbolResolver {
         val viewer = ViewerPrefetchBindings(
             viewerBaseClass = viewerBaseClass,
             mirrorRemoteTempFile = declaredMethod(viewerBaseClass, "u", fileItemClass),
+            viewerOnCreate = declaredMethod(viewerClass, "onCreate", android.os.Bundle::class.java),
             viewerOnDestroy = declaredMethod(viewerBaseClass, "onDestroy"),
             viewerLoadMediaAndBitmap = declaredMethod(viewerClass, "C", imageDisplayClass, itemHolderClass, Int::class.javaPrimitiveType),
             viewerLoadMedia = null,
@@ -1421,6 +1563,28 @@ object FxSymbolResolver {
             execUnsupportedField = declaredField(execClass, "F2")
         )
 
+        val explorerActivityClass = loadClass(cl, "nextapp.fx.ui.ExplorerActivity")
+        val contentHostClass = loadClass(cl, "nextapp.fx.ui.content.k")
+        val windowManagerClass = loadClass(cl, "nextapp.fx.ui.content.w")
+        val windowModelClass = loadClass(cl, "nextapp.fx.ui.content.c1")
+        val contentModelClass = loadClass(cl, "nextapp.fx.ui.content.p")
+
+        val folderLifecycle = FolderLifecycleBindings(
+            explorerActivityClass = explorerActivityClass,
+            explorerOnResume = declaredMethod(explorerActivityClass, "onResume"),
+            explorerOnDestroy = declaredMethod(explorerActivityClass, "onDestroy"),
+            windowManagerField = declaredField(contentHostClass, "n2"),
+            windowModelsField = declaredField(windowManagerClass, "f"),
+            windowModelCloseMethod = declaredMethod(windowManagerClass, "l", windowModelClass),
+            windowModelSetPathMethod = declaredMethod(windowModelClass, "v", fxPathClass),
+            windowModelCurrentContentMethod = declaredMethod(windowModelClass, "g"),
+            contentModelPathField = declaredField(contentModelClass, "Y"),
+            fxPathClass = fxPathClass,
+            fxPathElementsField = declaredField(fxPathClass, "f"),
+            fxPathParentMethod = declaredMethod(fxPathClass, "G"),
+            dirCatalogClass = dirCatalogClass
+        )
+
         return ResolvedSymbols(
             profile = FxProfile.FX_9108,
             versionCode = versionCode,
@@ -1430,7 +1594,8 @@ object FxSymbolResolver {
             remoteThumb = remoteThumb,
             settings = settings,
             androidData = androidData,
-            bonusLimits = bonusLimits
+            bonusLimits = bonusLimits,
+            folderLifecycle = folderLifecycle
         )
     }
 
@@ -1491,6 +1656,7 @@ object FxSymbolResolver {
         val viewer = ViewerPrefetchBindings(
             viewerBaseClass = viewerClass?.superclass,
             mirrorRemoteTempFile = null,
+            viewerOnCreate = declaredMethod(viewerClass, "onCreate", android.os.Bundle::class.java),
             viewerOnDestroy = viewerClass?.superclass?.let { declaredMethod(it, "onDestroy") },
             viewerLoadMediaAndBitmap = null, viewerLoadMedia = null, viewerLoadBitmap = null,
             viewerLoadGif = null, viewerOpenItemStream = null, viewerDecodeItem = null,
@@ -1542,6 +1708,23 @@ object FxSymbolResolver {
             execLinesField = null, execCharsetField = null, execUnsupportedField = null
         )
 
+        val explorerActivityClass = loadClass(cl, "nextapp.fx.ui.ExplorerActivity")
+        val folderLifecycle = FolderLifecycleBindings(
+            explorerActivityClass = explorerActivityClass,
+            explorerOnResume = declaredMethod(explorerActivityClass, "onResume"),
+            explorerOnDestroy = declaredMethod(explorerActivityClass, "onDestroy"),
+            windowManagerField = null,
+            windowModelsField = null,
+            windowModelCloseMethod = null,
+            windowModelSetPathMethod = null,
+            windowModelCurrentContentMethod = null,
+            contentModelPathField = null,
+            fxPathClass = null,
+            fxPathElementsField = null,
+            fxPathParentMethod = null,
+            dirCatalogClass = sibling.dirCatalogClass
+        )
+
         return ResolvedSymbols(
             profile = FxProfile.STRUCTURAL_FALLBACK,
             versionCode = versionCode,
@@ -1551,7 +1734,8 @@ object FxSymbolResolver {
             remoteThumb = remoteThumb,
             settings = settings,
             androidData = androidData,
-            bonusLimits = bonusLimits
+            bonusLimits = bonusLimits,
+            folderLifecycle = folderLifecycle
         )
     }
 

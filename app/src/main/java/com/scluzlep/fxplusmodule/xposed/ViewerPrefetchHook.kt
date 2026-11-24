@@ -40,6 +40,9 @@ object ViewerPrefetchHook {
 
         @Volatile
         var lastDirection: Int = 1
+
+        @Volatile
+        var currentFolderKey: String? = null
     }
 
     private const val STREAM_BUFFER_BYTES = 65_536
@@ -57,24 +60,35 @@ object ViewerPrefetchHook {
         val s = symbols.sibling
         val v = symbols.viewer
 
+        installer.install("viewer:onCreate", v.viewerOnCreate) { chain ->
+            val result = chain.proceed()
+            val activity = chain.thisObject as? Activity
+            if (activity != null && s.imageViewerActivityClass?.isInstance(activity) == true) {
+                trackInitialViewerFolder(symbols, activity)
+            }
+            result
+        }
+
         installer.install("viewer:mirrorRemoteTempFile", v.mirrorRemoteTempFile) { chain ->
             val activity = chain.thisObject as? Activity
             val viewerClass = s.imageViewerActivityClass
             if (activity == null || viewerClass == null || !viewerClass.isInstance(activity)) {
                 return@install chain.proceed()
             }
-            if (!FxConfigBridge.current.enableAdjacentPrefetch) {
-                return@install chain.proceed()
-            }
             val item = chain.getArg(0) ?: return@install chain.proceed()
-            if (!isRemoteFileItem(symbols, item)) {
+            val appCtx = activity.applicationContext ?: activity
+            val remote = isRemoteFileItem(symbols, item)
+            val prefetchItem = toPrefetchItem(symbols, appCtx, item, isRemote = remote)
+            if (prefetchItem != null && updateSessionFolderKey(activity, appCtx, prefetchItem.folderKey)) {
+                FolderCacheLifecycleHook.reconcileActiveFolders()
+            }
+            if (!FxConfigBridge.current.enableAdjacentPrefetch || !remote) {
                 return@install chain.proceed()
             }
 
-            val manager = PrefetchCacheManager.getOrCreate(activity.applicationContext) {
+            val manager = PrefetchCacheManager.getOrCreate(appCtx) {
                 FxConfigBridge.current
             }
-            val prefetchItem = toPrefetchItem(symbols, activity.applicationContext, item, isRemote = true)
             if (prefetchItem != null) {
                 val cached = manager.awaitOrDownload(prefetchItem)
                 if (cached != null && cached.exists() && cached.length() > 0L) {
@@ -291,6 +305,11 @@ object ViewerPrefetchHook {
         }
         session.currentIndex = index
         session.lastDirection = 1
+        val folderKey = session.prefetchItems.getOrNull(index)?.folderKey
+        if (folderKey != null && session.currentFolderKey != folderKey) {
+            session.currentFolderKey = folderKey
+            FolderCacheLifecycleHook.reconcileActiveFolders()
+        }
 
         if (FxConfigBridge.current.enableAdjacentPrefetch) {
             val manager = PrefetchCacheManager.getOrCreate(appCtx) { FxConfigBridge.current }
@@ -310,6 +329,11 @@ object ViewerPrefetchHook {
         }
         if (commit) {
             session.currentIndex = newIndex
+        }
+        val targetFolderKey = session.prefetchItems.getOrNull(newIndex)?.folderKey
+        if (targetFolderKey != null && session.currentFolderKey != targetFolderKey) {
+            session.currentFolderKey = targetFolderKey
+            FolderCacheLifecycleHook.reconcileActiveFolders()
         }
         if (FxConfigBridge.current.enableAdjacentPrefetch) {
             val manager = PrefetchCacheManager.getOrCreate(session.appContext) { FxConfigBridge.current }
@@ -334,12 +358,65 @@ object ViewerPrefetchHook {
         }
     }
 
+    private fun trackInitialViewerFolder(symbols: ResolvedSymbols, activity: Activity) {
+        val s = symbols.sibling
+        val appCtx = activity.applicationContext ?: activity
+        val folderKey = runCatching {
+            val holder = s.viewerCurrentHolderField?.get(activity)
+            val item = s.viewerInitialItemField?.get(activity)
+                ?: holder?.let { s.itemHolderFileItemField?.get(it) }
+            if (item != null) {
+                toPrefetchItem(symbols, appCtx, item, isRemote = isRemoteFileItem(symbols, item))?.folderKey
+            } else {
+                val uri = holder?.let { s.itemHolderUriField?.get(it) as? android.net.Uri }
+                    ?: activity.intent?.data
+                uri?.let {
+                    PrefetchItem.defaultFolderKey("uri:${it.scheme ?: "none"}", it.path ?: it.toString())
+                }
+            }
+        }.getOrNull()
+        if (updateSessionFolderKey(activity, appCtx, folderKey)) {
+            FolderCacheLifecycleHook.reconcileActiveFolders()
+        }
+    }
+
+    private fun updateSessionFolderKey(
+        activity: Activity,
+        appCtx: Context,
+        folderKey: String?
+    ): Boolean {
+        if (folderKey.isNullOrBlank()) return false
+        val session = getOrCreateSession(activity, appCtx)
+        if (session.currentFolderKey == folderKey) return false
+        session.currentFolderKey = folderKey
+        return true
+    }
+
+    fun getActiveViewerFolderKeys(): Set<String> {
+        val result = LinkedHashSet<String>()
+        synchronized(sessionsLock) {
+            for ((activity, session) in sessions) {
+                if (activity.isFinishing || activity.isDestroyed) continue
+                session.currentFolderKey?.takeIf { it.isNotBlank() }?.let { result.add(it) }
+            }
+        }
+        return result
+    }
+
+    fun onCacheKeysEvicted(evictedKeys: Set<String>) {
+        if (evictedKeys.isEmpty()) return
+        for (key in evictedKeys) {
+            activeCachedByIdentity.remove(key)
+        }
+    }
+
     private fun clearSession(activity: Activity) {
         val session = synchronized(sessionsLock) { sessions.remove(activity) } ?: return
         for (item in session.prefetchItems) {
             activeCachedByIdentity.remove(item.cacheKey)
         }
         PrefetchCacheManager.peekInstance()?.endSession(session.sessionId)
+        FolderCacheLifecycleHook.reconcileActiveFolders()
     }
 
     fun clearTransientStateOnHotReload() {
@@ -348,6 +425,7 @@ object ViewerPrefetchHook {
         synchronized(sessionsLock) {
             sessions.clear()
         }
+        resolvedSymbols = null
     }
 
     fun peekCachedFileForItem(symbols: ResolvedSymbols, item: Any?): File? {
@@ -390,7 +468,8 @@ object ViewerPrefetchHook {
         return runCatching {
             val catalog = s.getCatalog?.invoke(item)
             val catalogId = if (catalog != null) "${catalog.javaClass.name}:$catalog" else "none"
-            val path = s.getPath?.invoke(item)?.toString() ?: return null
+            val itemFxPath = s.getPath?.invoke(item) ?: return null
+            val path = itemFxPath.toString()
             val mtime = (s.getLastModified?.invoke(item) as? Number)?.toLong() ?: 0L
             val size = (s.getSize?.invoke(item) as? Number)?.toLong() ?: -1L
             val mime = s.getMimeType?.invoke(item) as? String
@@ -399,6 +478,11 @@ object ViewerPrefetchHook {
             } else {
                 null
             }
+            val parentFxPath = runCatching {
+                symbols.folderLifecycle.fxPathParentMethod?.invoke(itemFxPath)
+            }.getOrNull()
+            val folderKey = FolderCacheLifecycleHook.canonicalFolderKeyFromFxPath(symbols, parentFxPath)
+                ?: PrefetchItem.defaultFolderKey(catalogId, path)
             PrefetchItem(
                 catalogIdentity = catalogId,
                 path = path,
@@ -406,7 +490,8 @@ object ViewerPrefetchHook {
                 sizeBytes = size,
                 mimeType = mime,
                 isRemote = isRemote,
-                opener = opener
+                opener = opener,
+                folderKey = folderKey
             )
         }.getOrNull()
     }

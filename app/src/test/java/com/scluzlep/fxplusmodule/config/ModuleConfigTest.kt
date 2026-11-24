@@ -24,9 +24,33 @@ class ModuleConfigTest {
         assertTrue(cfg.enableRemoteThumbnails)
         assertEquals(64, cfg.maxRemoteThumbnailSizeMb)
         assertFalse(cfg.highResThumbnails)
+        assertTrue(cfg.disableSoftwareImageRendering)
+        assertTrue(cfg.enableHardwareGifPlayback)
         assertTrue(cfg.unlockTextPreviewLimits)
         assertTrue(cfg.enableAndroidDataAccess)
         assertFalse(cfg.debugLogging)
+    }
+
+    @Test
+    fun v11RenderAndGifSwitchesSerializeAndCompareProperly() {
+        val defaultFromEmpty = ModuleConfig.fromMap(emptyMap<String, Any>())
+        assertTrue(defaultFromEmpty.disableSoftwareImageRendering)
+        assertTrue(defaultFromEmpty.enableHardwareGifPlayback)
+
+        val customized = ModuleConfig(
+            disableSoftwareImageRendering = false,
+            enableHardwareGifPlayback = false,
+            updatedAtMs = 1_500L
+        )
+        val encoded = ModuleConfig.toMap(customized)
+        assertEquals(false, encoded[ConfigContract.KEY_DISABLE_SOFTWARE_IMAGE_RENDERING])
+        assertEquals(false, encoded[ConfigContract.KEY_ENABLE_HARDWARE_GIF_PLAYBACK])
+
+        val decoded = ModuleConfig.fromMap(encoded)
+        assertEquals(customized.sanitized(), decoded)
+        assertTrue(customized.sameSettingsAs(customized.copy(updatedAtMs = 9_999L)))
+        assertFalse(customized.sameSettingsAs(customized.copy(disableSoftwareImageRendering = true)))
+        assertFalse(customized.sameSettingsAs(customized.copy(enableHardwareGifPlayback = true)))
     }
 
     @Test

@@ -3,6 +3,7 @@ package com.scluzlep.fxplusmodule.cache
 import com.scluzlep.fxplusmodule.config.ConfigContract
 import com.scluzlep.fxplusmodule.config.ModuleConfig
 import com.scluzlep.fxplusmodule.config.PrefetchLimitMode
+import com.scluzlep.fxplusmodule.xposed.FolderCacheLifecycleHook
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -378,6 +379,197 @@ class PrefetchCacheManagerTest {
 
             manager.clearCache()
             assertEquals(0, manager.stats().entryCount)
+        } finally {
+            manager.shutdown()
+        }
+    }
+
+    @Test
+    fun folderPrefixedStorageSupportsColdKeyLookupAndImmediateEvictionWithInFlightCancel() {
+        val baseDir = tempFolder.newFolder("cache_folder_evict")
+        val cfg = ModuleConfig(prefetchLimitMode = PrefetchLimitMode.COUNT_ONLY, prefetchCount = 2)
+        val blockingOpened = CountDownLatch(1)
+        val blockedReadCancelled = CountDownLatch(1)
+
+        val slowStream = object : InputStream() {
+            @Volatile
+            var closed = false
+            override fun read(): Int {
+                blockingOpened.countDown()
+                while (!closed && !Thread.currentThread().isInterrupted) {
+                    try {
+                        Thread.sleep(20)
+                    } catch (_: InterruptedException) {
+                        Thread.currentThread().interrupt()
+                        break
+                    }
+                }
+                blockedReadCancelled.countDown()
+                return -1
+            }
+
+            override fun close() {
+                closed = true
+            }
+        }
+
+        val folderA = "SmbCatalog:nas|/photos/trip"
+        val folderB = "SmbCatalog:nas|/photos/work"
+        val itemA1 = PrefetchItem("SmbCatalog:nas", "/photos/trip/1.jpg", 1L, 4L, isRemote = true, opener = { ByteArrayInputStream(byteArrayOf(1, 2, 3, 4)) }, folderKey = folderA)
+        val itemA2 = PrefetchItem("SmbCatalog:nas", "/photos/trip/2.jpg", 1L, 100L, isRemote = true, opener = { slowStream }, folderKey = folderA)
+        val itemB1 = PrefetchItem("SmbCatalog:nas", "/photos/work/1.jpg", 1L, 4L, isRemote = true, opener = { ByteArrayInputStream(byteArrayOf(9, 8, 7, 6)) }, folderKey = folderB)
+
+        val manager = PrefetchCacheManager(
+            baseCacheDir = baseDir,
+            configProvider = { cfg },
+            storageSpaceProvider = { 4L * 1024L * 1024L * 1024L }
+        )
+        try {
+            val cachedA1 = manager.awaitOrDownload(itemA1)
+            val cachedB1 = manager.awaitOrDownload(itemB1)
+            assertNotNull(cachedA1)
+            assertNotNull(cachedB1)
+
+            val expectedHashA = PrefetchCacheManager.computeFolderHash(folderA)
+            assertEquals(16, expectedHashA.length)
+            assertEquals("${expectedHashA}_${itemA1.cacheKey}.bin", cachedA1!!.name)
+
+            // Cold cache manager (no keyToFolderHash warmed) resolves *_<key>.bin cleanly.
+            val coldManager = PrefetchCacheManager(
+                baseCacheDir = baseDir,
+                configProvider = { cfg },
+                storageSpaceProvider = { 4L * 1024L * 1024L * 1024L }
+            )
+            try {
+                val coldHit = coldManager.peekCachedFileByKey(itemA1.cacheKey, itemA1.sizeBytes)
+                assertNotNull(coldHit)
+                assertEquals(cachedA1.name, coldHit!!.name)
+            } finally {
+                coldManager.shutdown()
+            }
+
+            // Start background prefetch in folderA that blocks on slowStream.
+            manager.scheduleWindow(listOf(itemA1, itemA2), currentIndex = 0, direction = 1, sessionId = "sA")
+            assertTrue(blockingOpened.await(5, TimeUnit.SECONDS))
+
+            // Leave folderA while folderB remains open -> folderA cached & in-flight must vanish immediately.
+            val evicted = manager.retainOnlyFolders(setOf(folderB))
+            assertTrue(blockedReadCancelled.await(5, TimeUnit.SECONDS))
+            waitUntilSettled(manager)
+
+            assertTrue(itemA1.cacheKey in evicted)
+            assertTrue(itemA2.cacheKey in evicted)
+            assertFalse(itemB1.cacheKey in evicted)
+            assertNull(manager.peekCachedFile(itemA1))
+            assertNull(manager.peekCachedFile(itemA2))
+            assertNotNull(manager.peekCachedFile(itemB1))
+            assertTrue(cachedB1!!.exists())
+            assertFalse(cachedA1.exists())
+        } finally {
+            manager.shutdown()
+        }
+    }
+
+    @Test
+    fun sameFolderRetentionAcrossViewerCloseAndMultiTabUntilLastTabLeaves() {
+        val baseDir = tempFolder.newFolder("cache_multi_tab")
+        val cfg = ModuleConfig(prefetchLimitMode = PrefetchLimitMode.COUNT_ONLY, prefetchCount = 2)
+        val folderA = "SmbCatalog:nas|albumA"
+        val folderB = "SmbCatalog:nas|albumB"
+        val folderC = "SmbCatalog:nas|albumC"
+
+        val itemsA = (0 until 3).map { idx ->
+            PrefetchItem("SmbCatalog:nas", "/albumA/$idx.jpg", 10L, 4L, isRemote = true, opener = { ByteArrayInputStream(byteArrayOf(1, 2, 3, idx.toByte())) }, folderKey = folderA)
+        }
+        val itemB = PrefetchItem("SmbCatalog:nas", "/albumB/0.jpg", 10L, 4L, isRemote = true, opener = { ByteArrayInputStream(byteArrayOf(5, 6, 7, 8)) }, folderKey = folderB)
+
+        val manager = PrefetchCacheManager(
+            baseCacheDir = baseDir,
+            configProvider = { cfg },
+            storageSpaceProvider = { 4L * 1024L * 1024L * 1024L }
+        )
+        try {
+            manager.beginSession("viewer-1")
+            manager.scheduleWindow(itemsA, currentIndex = 0, direction = 1, sessionId = "viewer-1")
+            waitUntilSettled(manager)
+            assertNotNull(manager.peekCachedFile(itemsA[1]))
+
+            // Viewer closes while Explorer stays in folderA -> folderA cache is retained.
+            manager.endSession("viewer-1")
+            val afterViewerClose = manager.retainOnlyFolders(setOf(folderA))
+            assertTrue(afterViewerClose.isEmpty())
+            assertNotNull(manager.peekCachedFile(itemsA[1]))
+
+            // Multi-tab: Tab 1 navigates to folderB, Tab 2 is still in folderA -> retained!
+            manager.awaitOrDownload(itemB)
+            val whileTab2Open = manager.retainOnlyFolders(setOf(folderB, folderA))
+            assertTrue(whileTab2Open.isEmpty())
+            assertNotNull(manager.peekCachedFile(itemsA[1]))
+            assertNotNull(manager.peekCachedFile(itemB))
+
+            // Last tab leaves folderA (Tab 2 navigates to folderC) -> folderA immediately evicted!
+            val afterLastTabLeaves = manager.retainOnlyFolders(setOf(folderB, folderC))
+            assertTrue(itemsA[1].cacheKey in afterLastTabLeaves)
+            assertNull(manager.peekCachedFile(itemsA[1]))
+            assertNotNull(manager.peekCachedFile(itemB))
+        } finally {
+            manager.shutdown()
+        }
+    }
+
+    @Test
+    fun retainOnlyFoldersPurgesLegacyUnprefixedFilesAndNormalizesCanonicalPaths() {
+        val baseDir = tempFolder.newFolder("cache_legacy_purge")
+        val cfg = ModuleConfig()
+        val activeFolder = "SmbCatalog:nas|photos"
+        val activeItem = PrefetchItem("SmbCatalog:nas", "/photos/keep.jpg", 1L, 4L, isRemote = true, opener = { ByteArrayInputStream(byteArrayOf(7, 7, 7, 7)) }, folderKey = activeFolder)
+
+        val manager = PrefetchCacheManager(
+            baseCacheDir = baseDir,
+            configProvider = { cfg },
+            storageSpaceProvider = { 4L * 1024L * 1024L * 1024L }
+        )
+        try {
+            val activeBin = manager.awaitOrDownload(activeItem)
+            assertNotNull(activeBin)
+
+            // Write legacy v1.0 unprefixed .bin & stray .part files directly in cacheRoot.
+            val legacyShaBin = File(manager.cacheRoot, "a".repeat(64) + ".bin").apply { writeText("v10") }
+            val legacyNamedBin = File(manager.cacheRoot, "legacy_unprefixed.bin").apply { writeText("old") }
+            val strayPart = File(manager.cacheRoot, "stale_unprefixed.part.12345678").apply { writeText("part") }
+
+            val evicted = manager.retainOnlyFolders(setOf(activeFolder))
+            assertFalse(legacyShaBin.exists())
+            assertFalse(legacyNamedBin.exists())
+            assertFalse(strayPart.exists())
+            assertTrue(activeBin!!.exists())
+            assertTrue("a".repeat(64) in evicted)
+            assertTrue("legacy_unprefixed" in evicted)
+
+            // Canonical FX path normalization checks
+            open class FakeCatalog(private val id: String) {
+                override fun toString(): String = id
+            }
+            class FakeIdCatalog(private val id: String) {
+                override fun toString(): String = id
+            }
+            val isCatalog: (Any) -> Boolean = { it is FakeCatalog }
+            val smb = FakeCatalog("smb://nas")
+            val archive = FakeCatalog("zip://pack")
+
+            val explorerPath = arrayOf<Any>(FakeIdCatalog("network"), smb, "photos", "2026")
+            val itemParentPath = arrayOf<Any>(smb, "/photos/", "2026")
+            val expectedKey = "${FakeCatalog::class.java.name}:smb://nas|photos/2026"
+            assertEquals(expectedKey, FolderCacheLifecycleHook.canonicalFolderKeyFromElements(explorerPath, isCatalog))
+            assertEquals(expectedKey, FolderCacheLifecycleHook.canonicalFolderKeyFromElements(itemParentPath, isCatalog))
+
+            // Home / Bookmarks / Network list (no DirectoryCatalog) returns null.
+            assertNull(FolderCacheLifecycleHook.canonicalFolderKeyFromElements(arrayOf<Any>(FakeIdCatalog("home")), isCatalog))
+            assertNull(FolderCacheLifecycleHook.canonicalFolderKeyFromElements(emptyArray<Any>(), isCatalog))
+
+            // Catalog root and nested catalog anchoring.
+            assertEquals("${FakeCatalog::class.java.name}:smb://nas|", FolderCacheLifecycleHook.canonicalFolderKeyFromElements(arrayOf(FakeIdCatalog("network"), smb), isCatalog))
+            assertEquals("${FakeCatalog::class.java.name}:zip://pack|inner", FolderCacheLifecycleHook.canonicalFolderKeyFromElements(arrayOf(smb, "a.zip", archive, "inner"), isCatalog))
         } finally {
             manager.shutdown()
         }

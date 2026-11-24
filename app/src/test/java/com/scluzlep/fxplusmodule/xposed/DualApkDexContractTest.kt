@@ -30,6 +30,35 @@ class DualApkDexContractTest {
         verifyApkContract(apkFile, FxDexContracts.contract9108, label = "9108")
     }
 
+    @Test
+    fun v11ContractsIncludeHardwareRenderAndFolderLifecycleSymbols() {
+        val c9012 = FxDexContracts.contract9012
+        val c9108 = FxDexContracts.contract9108
+
+        assertTrue(c9012.classes.containsAll(listOf(
+            "nextapp.fx.ui.ExplorerActivity",
+            "nextapp.fx.ui.content.r",
+            "nextapp.fx.ui.content.h0",
+            "nextapp.fx.ui.content.e2",
+            "nextapp.fx.ui.content.e0",
+            "v8.f"
+        )))
+        assertTrue(c9108.classes.containsAll(listOf(
+            "nextapp.fx.ui.ExplorerActivity",
+            "nextapp.fx.ui.content.k",
+            "nextapp.fx.ui.content.w",
+            "nextapp.fx.ui.content.c1",
+            "nextapp.fx.ui.content.p",
+            "pa.c"
+        )))
+        assertTrue(c9012.methods.any { it.className == "nextapp.maui.ui.imageview.TouchImageDisplay" && it.methodName == "onDraw" })
+        assertTrue(c9012.methods.any { it.className == "se.f" && it.methodName == "C" })
+        assertTrue(c9108.methods.any { it.className == "nextapp.maui.ui.imageview.TouchImageDisplay" && it.methodName == "onDraw" })
+        assertTrue(c9108.methods.any { it.className == "hh.f" && it.methodName == "G" })
+        assertTrue(c9012.fields.any { it.className == "nextapp.fx.ui.content.r" && it.fieldName == "r5" })
+        assertTrue(c9108.fields.any { it.className == "nextapp.fx.ui.content.k" && it.fieldName == "n2" })
+    }
+
     private fun resolveRepoRelativeFile(relFromRepoRoot: String): File {
         val direct = File(relFromRepoRoot)
         if (direct.isFile) return direct

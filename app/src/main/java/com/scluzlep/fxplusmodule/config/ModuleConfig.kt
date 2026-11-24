@@ -21,6 +21,8 @@ data class ModuleConfig(
     val enableRemoteThumbnails: Boolean = ConfigContract.DEFAULT_ENABLE_REMOTE_THUMBNAILS,
     val maxRemoteThumbnailSizeMb: Int = ConfigContract.DEFAULT_MAX_REMOTE_THUMBNAIL_SIZE_MB,
     val highResThumbnails: Boolean = ConfigContract.DEFAULT_HIGH_RES_THUMBNAILS,
+    val disableSoftwareImageRendering: Boolean = ConfigContract.DEFAULT_DISABLE_SOFTWARE_IMAGE_RENDERING,
+    val enableHardwareGifPlayback: Boolean = ConfigContract.DEFAULT_ENABLE_HARDWARE_GIF_PLAYBACK,
     val unlockTextPreviewLimits: Boolean = ConfigContract.DEFAULT_UNLOCK_TEXT_PREVIEW_LIMITS,
     val enableAndroidDataAccess: Boolean = ConfigContract.DEFAULT_ENABLE_ANDROID_DATA_ACCESS,
     val debugLogging: Boolean = ConfigContract.DEFAULT_DEBUG_LOGGING,
@@ -107,6 +109,8 @@ data class ModuleConfig(
             a.enableRemoteThumbnails == b.enableRemoteThumbnails &&
             a.maxRemoteThumbnailSizeMb == b.maxRemoteThumbnailSizeMb &&
             a.highResThumbnails == b.highResThumbnails &&
+            a.disableSoftwareImageRendering == b.disableSoftwareImageRendering &&
+            a.enableHardwareGifPlayback == b.enableHardwareGifPlayback &&
             a.unlockTextPreviewLimits == b.unlockTextPreviewLimits &&
             a.enableAndroidDataAccess == b.enableAndroidDataAccess &&
             a.debugLogging == b.debugLogging
@@ -174,6 +178,14 @@ data class ModuleConfig(
                     values[ConfigContract.KEY_HIGH_RES_THUMBNAILS],
                     ConfigContract.DEFAULT_HIGH_RES_THUMBNAILS
                 ),
+                disableSoftwareImageRendering = readBool(
+                    values[ConfigContract.KEY_DISABLE_SOFTWARE_IMAGE_RENDERING],
+                    ConfigContract.DEFAULT_DISABLE_SOFTWARE_IMAGE_RENDERING
+                ),
+                enableHardwareGifPlayback = readBool(
+                    values[ConfigContract.KEY_ENABLE_HARDWARE_GIF_PLAYBACK],
+                    ConfigContract.DEFAULT_ENABLE_HARDWARE_GIF_PLAYBACK
+                ),
                 unlockTextPreviewLimits = readBool(
                     values[ConfigContract.KEY_UNLOCK_TEXT_PREVIEW_LIMITS],
                     ConfigContract.DEFAULT_UNLOCK_TEXT_PREVIEW_LIMITS
@@ -208,6 +220,8 @@ data class ModuleConfig(
                 ConfigContract.KEY_ENABLE_REMOTE_THUMBNAILS to clean.enableRemoteThumbnails,
                 ConfigContract.KEY_MAX_REMOTE_THUMBNAIL_SIZE_MB to clean.maxRemoteThumbnailSizeMb,
                 ConfigContract.KEY_HIGH_RES_THUMBNAILS to clean.highResThumbnails,
+                ConfigContract.KEY_DISABLE_SOFTWARE_IMAGE_RENDERING to clean.disableSoftwareImageRendering,
+                ConfigContract.KEY_ENABLE_HARDWARE_GIF_PLAYBACK to clean.enableHardwareGifPlayback,
                 ConfigContract.KEY_UNLOCK_TEXT_PREVIEW_LIMITS to clean.unlockTextPreviewLimits,
                 ConfigContract.KEY_ENABLE_ANDROID_DATA_ACCESS to clean.enableAndroidDataAccess,
                 ConfigContract.KEY_DEBUG_LOGGING to clean.debugLogging,
@@ -279,6 +293,16 @@ data class ModuleConfig(
                     ConfigContract.KEY_HIGH_RES_THUMBNAILS,
                     ConfigContract.DEFAULT_HIGH_RES_THUMBNAILS
                 ),
+                disableSoftwareImageRendering = readPrefBool(
+                    prefs,
+                    ConfigContract.KEY_DISABLE_SOFTWARE_IMAGE_RENDERING,
+                    ConfigContract.DEFAULT_DISABLE_SOFTWARE_IMAGE_RENDERING
+                ),
+                enableHardwareGifPlayback = readPrefBool(
+                    prefs,
+                    ConfigContract.KEY_ENABLE_HARDWARE_GIF_PLAYBACK,
+                    ConfigContract.DEFAULT_ENABLE_HARDWARE_GIF_PLAYBACK
+                ),
                 unlockTextPreviewLimits = readPrefBool(
                     prefs,
                     ConfigContract.KEY_UNLOCK_TEXT_PREVIEW_LIMITS,
@@ -320,6 +344,8 @@ data class ModuleConfig(
                 .putBoolean(ConfigContract.KEY_ENABLE_REMOTE_THUMBNAILS, clean.enableRemoteThumbnails)
                 .putInt(ConfigContract.KEY_MAX_REMOTE_THUMBNAIL_SIZE_MB, clean.maxRemoteThumbnailSizeMb)
                 .putBoolean(ConfigContract.KEY_HIGH_RES_THUMBNAILS, clean.highResThumbnails)
+                .putBoolean(ConfigContract.KEY_DISABLE_SOFTWARE_IMAGE_RENDERING, clean.disableSoftwareImageRendering)
+                .putBoolean(ConfigContract.KEY_ENABLE_HARDWARE_GIF_PLAYBACK, clean.enableHardwareGifPlayback)
                 .putBoolean(ConfigContract.KEY_UNLOCK_TEXT_PREVIEW_LIMITS, clean.unlockTextPreviewLimits)
                 .putBoolean(ConfigContract.KEY_ENABLE_ANDROID_DATA_ACCESS, clean.enableAndroidDataAccess)
                 .putBoolean(ConfigContract.KEY_DEBUG_LOGGING, clean.debugLogging)
