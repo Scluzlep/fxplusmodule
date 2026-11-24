@@ -37,7 +37,7 @@ data class PrivilegedStat(
 /**
  * Dual-engine storage client for `Android/data` and `Android/obb` inside `nextapp.fx`.
  * Priority 1: Root in the FUSE mount namespace directly on `/storage/emulated/<userId>/Android/(data|obb)`
- * (`su 2000` / `su -u 2000` first, plain `su` fallback; never uses global `-mm` or raw lowerfs).
+ * (plain `su` first, then `su 1077`, `su 1023`, `su 2000`, `su -u 2000`; never uses global `-mm` or raw lowerfs).
  * Priority 2: Authorized Shizuku ContentProvider bridge (`content://com.scluzlep.fxplusmodule.storagebridge`).
  */
 object PrivilegedStorageClient {
@@ -65,10 +65,31 @@ object PrivilegedStorageClient {
     @Volatile
     private var persistentShell: PersistentShellSession? = null
 
-    private enum class RootShellMode(val prefixArgs: List<String>) {
+    @Volatile
+    internal var oneShotRunnerOverride: ((List<String>) -> Pair<Int, String>?)? = null
+
+    @Volatile
+    internal var rootCommandExecutorOverride: ((RootShellMode, String) -> ShellExecResult?)? = null
+
+    @Volatile
+    internal var shizukuListOverride: ((Context, String) -> List<PrivilegedStat>?)? = null
+
+    internal enum class RootShellMode(val prefixArgs: List<String>) {
+        SU_PLAIN(listOf("su")),
+        SU_EXT_STORAGE_UID(listOf("su", "1077")),
+        SU_MEDIA_RW_UID(listOf("su", "1023")),
         SU_SHELL_UID(listOf("su", "2000")),
-        SU_U_FLAG_UID(listOf("su", "-u", "2000")),
-        SU_PLAIN(listOf("su"))
+        SU_U_FLAG_UID(listOf("su", "-u", "2000"));
+
+        fun matchesIdOutput(output: String): Boolean {
+            return when (this) {
+                SU_PLAIN -> output.contains("uid=0(")
+                SU_EXT_STORAGE_UID -> output.contains("uid=1077(") || output.contains("uid=0(")
+                SU_MEDIA_RW_UID -> output.contains("uid=1023(") || output.contains("uid=0(")
+                SU_SHELL_UID,
+                SU_U_FLAG_UID -> output.contains("uid=2000(") || output.contains("uid=0(")
+            }
+        }
     }
 
     /**
@@ -110,11 +131,22 @@ object PrivilegedStorageClient {
 
     fun resetOnHotReload() {
         statCache.clear()
+        oneShotRunnerOverride = null
+        rootCommandExecutorOverride = null
+        shizukuListOverride = null
         synchronized(rootShellLock) {
             persistentShell?.close()
             persistentShell = null
             rootShellMode = null
             lastRootProbeFailMs = 0L
+        }
+    }
+
+    internal fun currentCachedRootModeForTest(): RootShellMode? = rootShellMode
+
+    internal fun setCachedRootModeForTest(mode: RootShellMode?) {
+        synchronized(rootShellLock) {
+            rootShellMode = mode
         }
     }
 
@@ -130,19 +162,27 @@ object PrivilegedStorageClient {
         if (mode != null) {
             val fromRoot = rootListEntries(mode, normalized)
             if (fromRoot != null) {
-                val now = System.currentTimeMillis()
-                for (item in fromRoot) {
-                    statCache[item.path] = now to item
-                }
+                cacheListedStats(fromRoot)
                 return fromRoot
             }
+            clearCachedRootModeIfMatches(mode)
+            val fallbackEntries = tryRemainingRootModesForList(normalized, failedMode = mode)
+            if (fallbackEntries != null) {
+                cacheListedStats(fallbackEntries)
+                return fallbackEntries
+            }
         }
-        val fromShizuku = shizukuListEntries(context, normalized) ?: return null
+        val fromShizuku = (shizukuListOverride ?: { ctx, path -> shizukuListEntries(ctx, path) })(context, normalized)
+            ?: return null
+        cacheListedStats(fromShizuku)
+        return fromShizuku
+    }
+
+    private fun cacheListedStats(entries: List<PrivilegedStat>) {
         val now = System.currentTimeMillis()
-        for (item in fromShizuku) {
+        for (item in entries) {
             statCache[item.path] = now to item
         }
-        return fromShizuku
     }
 
     fun stat(context: Context, rawPath: String, useCache: Boolean = true): PrivilegedStat? {
@@ -284,12 +324,7 @@ object PrivilegedStorageClient {
             rootShellMode?.let { return it }
             val probeRoot = extractProbeRoot(probeFusePath)
             val escProbe = escapeShellSingleQuotes(probeRoot)
-            val candidates = listOf(
-                RootShellMode.SU_SHELL_UID,
-                RootShellMode.SU_U_FLAG_UID,
-                RootShellMode.SU_PLAIN
-            )
-            for (candidate in candidates) {
+            for (candidate in RootShellMode.entries) {
                 val ok = testRootMode(candidate, escProbe)
                 if (ok) {
                     rootShellMode = candidate
@@ -301,14 +336,54 @@ object PrivilegedStorageClient {
         }
     }
 
+    private fun clearCachedRootModeIfMatches(mode: RootShellMode) {
+        synchronized(rootShellLock) {
+            if (rootShellMode == mode) {
+                persistentShell?.close()
+                persistentShell = null
+                rootShellMode = null
+            }
+        }
+    }
+
+    private fun tryRemainingRootModesForList(
+        normalizedDir: String,
+        failedMode: RootShellMode
+    ): List<PrivilegedStat>? {
+        val escTarget = escapeShellSingleQuotes(normalizedDir)
+        for (candidate in RootShellMode.entries) {
+            if (candidate == failedMode) continue
+            if (!testRootMode(candidate, escTarget)) continue
+            val entries = rootListEntries(candidate, normalizedDir)
+            if (entries != null) {
+                synchronized(rootShellLock) {
+                    if (rootShellMode == null) {
+                        rootShellMode = candidate
+                    }
+                }
+                return entries
+            }
+        }
+        return null
+    }
+
     private fun extractProbeRoot(normalizedFusePath: String): String {
         val match = Regex("^(/storage/emulated/[0-9]+/Android/(data|obb))").find(normalizedFusePath)
         return match?.value ?: "/storage/emulated/0/Android/data"
     }
 
+    internal fun buildProbeArgs(mode: RootShellMode, escapedProbeRoot: String): List<String> {
+        return mode.prefixArgs + listOf("-c", "id && ls -1A -- '$escapedProbeRoot' >/dev/null 2>&1")
+    }
+
     private fun testRootMode(mode: RootShellMode, escapedProbeRoot: String): Boolean {
+        val args = buildProbeArgs(mode, escapedProbeRoot)
+        val override = oneShotRunnerOverride
+        if (override != null) {
+            val res = runCatching { override(args) }.getOrNull() ?: return false
+            return res.first == 0 && mode.matchesIdOutput(res.second)
+        }
         return runCatching {
-            val args = mode.prefixArgs + listOf("-c", "id && ls -d -- '$escapedProbeRoot' >/dev/null 2>&1")
             val proc = ProcessBuilder(args).redirectErrorStream(true).start()
             val out = proc.inputStream.bufferedReader().use { it.readText() }
             val exited = proc.waitFor(4, TimeUnit.SECONDS)
@@ -317,19 +392,17 @@ object PrivilegedStorageClient {
                 return false
             }
             if (proc.exitValue() != 0) return false
-            when (mode) {
-                RootShellMode.SU_SHELL_UID,
-                RootShellMode.SU_U_FLAG_UID -> out.contains("uid=2000(") || out.contains("uid=0(")
-                RootShellMode.SU_PLAIN -> out.contains("uid=0(")
-            }
+            mode.matchesIdOutput(out)
         }.getOrDefault(false)
     }
 
-    private fun rootListEntries(mode: RootShellMode, normalizedDir: String): List<PrivilegedStat>? {
+    internal fun buildRootListScript(normalizedDir: String): String {
         val esc = escapeShellSingleQuotes(normalizedDir)
-        val script = """
+        return """
+            (
             d='$esc'
             [ -d "${'$'}d" ] || exit 2
+            ls -1A -- "${'$'}d" >/dev/null 2>&1 || exit 3
             for f in "${'$'}d"/* "${'$'}d"/.*; do
               [ -e "${'$'}f" ] || [ -L "${'$'}f" ] || continue
               b=${'$'}{f##*/}
@@ -340,7 +413,13 @@ object PrivilegedStorageClient {
               w=0; [ -w "${'$'}f" ] && w=1
               printf '%s\t%s\t%s\t%s\t%s\n' "${'$'}t" "${'$'}s" "${'$'}r" "${'$'}w" "${'$'}b"
             done
+            :
+            )
         """.trimIndent()
+    }
+
+    private fun rootListEntries(mode: RootShellMode, normalizedDir: String): List<PrivilegedStat>? {
+        val script = buildRootListScript(normalizedDir)
         val result = execRootCommand(mode, script) ?: return null
         if (result.exitCode != 0) return null
 
@@ -471,9 +550,10 @@ object PrivilegedStorageClient {
         return ProcessBackedOutputStream(proc)
     }
 
-    private data class ShellExecResult(val exitCode: Int, val lines: List<String>)
+    internal data class ShellExecResult(val exitCode: Int, val lines: List<String>)
 
     private fun execRootCommand(mode: RootShellMode, command: String): ShellExecResult? {
+        rootCommandExecutorOverride?.let { return it(mode, command) }
         synchronized(rootShellLock) {
             var session = persistentShell
             if (session == null || !session.isAlive() || session.mode != mode) {

@@ -3,6 +3,7 @@ package com.scluzlep.fxplusmodule.xposed
 import android.app.Activity
 import android.content.Context
 import android.media.ExifInterface
+import android.view.View
 import com.scluzlep.fxplusmodule.cache.PrefetchCacheManager
 import com.scluzlep.fxplusmodule.cache.PrefetchItem
 import io.github.libxposed.api.XposedInterface
@@ -10,6 +11,7 @@ import java.io.BufferedInputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.InputStream
+import java.lang.reflect.Field
 import java.util.IdentityHashMap
 import java.util.Locale
 import java.util.UUID
@@ -55,8 +57,13 @@ object ViewerPrefetchHook {
     @Volatile
     private var resolvedSymbols: ResolvedSymbols? = null
 
+    @Volatile
+    private var resolvedProgressBarField: Field? = null
+
     fun install(symbols: ResolvedSymbols, installer: FxHookInstaller) {
         resolvedSymbols = symbols
+        installTaskThreadFactory(symbols, installer)
+        resolvedProgressBarField = resolveProgressBarField(symbols)
         val s = symbols.sibling
         val v = symbols.viewer
 
@@ -90,9 +97,11 @@ object ViewerPrefetchHook {
                 FxConfigBridge.current
             }
             if (prefetchItem != null) {
-                val cached = manager.awaitOrDownload(prefetchItem)
+                val cached = manager.peekCachedFile(prefetchItem)
+                    ?: manager.awaitOrDownload(prefetchItem)
                 if (cached != null && cached.exists() && cached.length() > 0L) {
                     recordCachedFile(symbols, item, cached)
+                    ensureCachedDisplayVisible(symbols, activity)
                     installer.logDebug("Served remote image via single-flight cache: ${cached.name}")
                     return@install null
                 }
@@ -358,13 +367,82 @@ object ViewerPrefetchHook {
         }
     }
 
+    private fun installTaskThreadFactory(symbols: ResolvedSymbols, installer: FxHookInstaller) {
+        val taskThreadClassName = when (symbols.profile) {
+            FxProfile.FX_9012 -> "i9.e"
+            FxProfile.FX_9108 -> "bb.d"
+            FxProfile.STRUCTURAL_FALLBACK -> null
+        }
+        if (taskThreadClassName == null) {
+            PrefetchCacheManager.customThreadFactory = null
+            return
+        }
+        val ctor = runCatching {
+            val clazz = Class.forName(taskThreadClassName, false, symbols.classLoader)
+            clazz.getDeclaredConstructor(
+                Class::class.java,
+                String::class.java,
+                Runnable::class.java
+            ).apply { isAccessible = true }
+        }.onFailure { err ->
+            installer.logWarn("Failed to resolve FX TaskThread $taskThreadClassName", err)
+        }.getOrNull()
+        if (ctor == null) {
+            PrefetchCacheManager.customThreadFactory = null
+            return
+        }
+
+        // Leave FX's UI interaction handler (a5 / X1) null so background SMB/network transfers run silently.
+        PrefetchCacheManager.customThreadFactory = { name, runnable ->
+            val thread = runCatching {
+                ctor.newInstance(FxPlusModule::class.java, name, runnable) as? Thread
+            }.onFailure { err ->
+                installer.logWarn("Failed to instantiate FX TaskThread $taskThreadClassName", err)
+            }.getOrNull() ?: Thread(runnable, name)
+            thread.apply {
+                isDaemon = true
+                priority = Thread.NORM_PRIORITY - 1
+            }
+        }
+    }
+
+    private fun resolveProgressBarField(symbols: ResolvedSymbols): Field? {
+        val fieldName = when (symbols.profile) {
+            FxProfile.FX_9012 -> "R5"
+            FxProfile.FX_9108 -> "N2"
+            FxProfile.STRUCTURAL_FALLBACK -> return null
+        }
+        val viewerClass = symbols.sibling.imageViewerActivityClass ?: return null
+        return runCatching {
+            viewerClass.getDeclaredField(fieldName).apply { isAccessible = true }
+        }.getOrNull()
+    }
+
+    private fun ensureCachedDisplayVisible(symbols: ResolvedSymbols, activity: Activity) {
+        val progressField = resolvedProgressBarField
+        val displayField = symbols.sibling.viewerCurrentDisplayField
+        if (progressField == null && displayField == null) return
+        activity.runOnUiThread {
+            if (activity.isFinishing || activity.isDestroyed) return@runOnUiThread
+            runCatching {
+                (progressField?.get(activity) as? View)?.visibility = View.GONE
+                (displayField?.get(activity) as? View)?.visibility = View.VISIBLE
+            }
+        }
+    }
+
     private fun trackInitialViewerFolder(symbols: ResolvedSymbols, activity: Activity) {
         val s = symbols.sibling
         val appCtx = activity.applicationContext ?: activity
         val folderKey = runCatching {
             val holder = s.viewerCurrentHolderField?.get(activity)
+            @Suppress("DEPRECATION")
+            val intentItem = activity.intent?.extras?.get("nextapp.fx.intent.extra.ITEM")?.takeIf {
+                s.fileItemClass == null || s.fileItemClass.isInstance(it)
+            }
             val item = s.viewerInitialItemField?.get(activity)
                 ?: holder?.let { s.itemHolderFileItemField?.get(it) }
+                ?: intentItem
             if (item != null) {
                 toPrefetchItem(symbols, appCtx, item, isRemote = isRemoteFileItem(symbols, item))?.folderKey
             } else {
@@ -420,6 +498,8 @@ object ViewerPrefetchHook {
     }
 
     fun clearTransientStateOnHotReload() {
+        PrefetchCacheManager.customThreadFactory = null
+        resolvedProgressBarField = null
         scopedStreamFile.remove()
         activeCachedByIdentity.clear()
         synchronized(sessionsLock) {
