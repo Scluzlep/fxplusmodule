@@ -6,7 +6,6 @@ import android.net.NetworkCapabilities
 import com.scluzlep.fxplusmodule.config.ConfigContract
 import com.scluzlep.fxplusmodule.config.ModuleConfig
 import com.scluzlep.fxplusmodule.config.PrefetchLimitMode
-import java.io.Closeable
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -81,7 +80,8 @@ class PrefetchCacheManager(
         Executors.newFixedThreadPool(
             threads.coerceIn(ConfigContract.MIN_PREFETCH_CONCURRENCY, ConfigContract.MAX_PREFETCH_CONCURRENCY),
             ThreadFactory { r ->
-                Thread(r, "fxplus-prefetch-${seq.incrementAndGet()}").apply {
+                val name = "fxplus-prefetch-${seq.incrementAndGet()}"
+                (runCatching { customThreadFactory?.invoke(name, r) }.getOrNull() ?: Thread(r, name)).apply {
                     isDaemon = true
                     priority = Thread.NORM_PRIORITY - 1
                 }
@@ -98,22 +98,37 @@ class PrefetchCacheManager(
     ) {
         val cancelled = AtomicBoolean(false)
         val foregroundWaiters = AtomicInteger(0)
-        val activeStream = AtomicReference<Closeable?>(null)
         @Volatile
         var taskFuture: Future<*>? = null
 
+        fun isCancelled(): Boolean = cancelled.get()
+
+        fun tryJoinForeground(): Boolean {
+            synchronized(this) {
+                if (cancelled.get()) return false
+                foregroundWaiters.incrementAndGet()
+                return true
+            }
+        }
+
+        fun leaveForeground() {
+            foregroundWaiters.decrementAndGet()
+        }
+
         fun requestCancelIfNotForeground() {
-            if (foregroundWaiters.get() > 0) return
-            if (cancelled.compareAndSet(false, true)) {
-                runCatching { activeStream.getAndSet(null)?.close() }
-                taskFuture?.cancel(true)
+            synchronized(this) {
+                if (foregroundWaiters.get() > 0) return
+                if (cancelled.compareAndSet(false, true)) {
+                    taskFuture?.cancel(false)
+                }
             }
         }
 
         fun forceCancel() {
-            if (cancelled.compareAndSet(false, true)) {
-                runCatching { activeStream.getAndSet(null)?.close() }
-                taskFuture?.cancel(true)
+            synchronized(this) {
+                if (cancelled.compareAndSet(false, true)) {
+                    taskFuture?.cancel(false)
+                }
             }
         }
     }
@@ -205,14 +220,13 @@ class PrefetchCacheManager(
         val folderHash = item.folderHash
         keyToFolderHash[key] = folderHash
         val existing = inFlight[key]
-        if (existing != null && !existing.cancelled.get()) {
-            existing.foregroundWaiters.incrementAndGet()
+        if (existing != null && existing.tryJoinForeground()) {
             return try {
                 existing.future.get()
             } catch (_: Throwable) {
                 null
             } finally {
-                existing.foregroundWaiters.decrementAndGet()
+                existing.leaveForeground()
             }
         }
 
@@ -220,21 +234,24 @@ class PrefetchCacheManager(
         val gen = generationCounter.get()
         val future = CompletableFuture<File?>()
         val entry = InFlightDownload(key, folderHash, gen, future)
+        entry.tryJoinForeground()
 
-        val prev = inFlight.putIfAbsent(key, entry)
-        if (prev != null && !prev.cancelled.get()) {
-            prev.foregroundWaiters.incrementAndGet()
-            return try {
-                prev.future.get()
-            } catch (_: Throwable) {
-                null
-            } finally {
-                prev.foregroundWaiters.decrementAndGet()
+        while (true) {
+            val prev = inFlight.putIfAbsent(key, entry)
+            if (prev == null) break
+            if (prev.tryJoinForeground()) {
+                entry.leaveForeground()
+                return try {
+                    prev.future.get()
+                } catch (_: Throwable) {
+                    null
+                } finally {
+                    prev.leaveForeground()
+                }
             }
-        }
-        entry.foregroundWaiters.incrementAndGet()
-        if (prev != null) {
-            inFlight[key] = entry
+            if (inFlight.replace(key, prev, entry)) {
+                break
+            }
         }
 
         return try {
@@ -245,7 +262,7 @@ class PrefetchCacheManager(
             future.complete(null)
             null
         } finally {
-            entry.foregroundWaiters.decrementAndGet()
+            entry.leaveForeground()
             inFlight.remove(key, entry)
         }
     }
@@ -547,21 +564,19 @@ class PrefetchCacheManager(
         val folderHash = item.folderHash
         keyToFolderHash[key] = folderHash
         val existing = inFlight[key]
-        if (existing != null && !existing.cancelled.get()) return
+        if (existing != null && !existing.isCancelled()) return
 
         val future = CompletableFuture<File?>()
         val entry = InFlightDownload(key, folderHash, generation, future)
         val prev = inFlight.putIfAbsent(key, entry)
-        if (prev != null && !prev.cancelled.get()) return
-        if (prev != null) {
-            inFlight[key] = entry
-        }
+        if (prev != null && !prev.isCancelled()) return
+        if (prev != null && !inFlight.replace(key, prev, entry)) return
 
         val exec = getOrCreateExecutor(config.prefetchConcurrency)
         try {
             entry.taskFuture = exec.submit {
                 try {
-                    if (entry.cancelled.get() || Thread.currentThread().isInterrupted) {
+                    if (entry.isCancelled() || Thread.currentThread().isInterrupted) {
                         future.complete(null)
                         return@submit
                     }
@@ -602,13 +617,16 @@ class PrefetchCacheManager(
             }
         }
 
+        if (entry.isCancelled() || Thread.currentThread().isInterrupted) {
+            return null
+        }
+
         val stream = try {
             opener()
         } catch (_: Throwable) {
             null
         } ?: return null
 
-        entry.activeStream.set(stream)
         val partFile = File(cacheRoot, "${folderHash}_${key}.part.${UUID.randomUUID().toString().substring(0, 8)}")
         var succeeded = false
         var written = 0L
@@ -618,12 +636,12 @@ class PrefetchCacheManager(
                 FileOutputStream(partFile).use { output ->
                     val buffer = ByteArray(COPY_BUFFER_BYTES)
                     while (true) {
-                        if (entry.cancelled.get() || Thread.currentThread().isInterrupted) {
+                        if (entry.isCancelled() || Thread.currentThread().isInterrupted) {
                             return null
                         }
                         val read = input.read(buffer)
                         if (read == -1) break
-                        if (entry.cancelled.get() || Thread.currentThread().isInterrupted) {
+                        if (entry.isCancelled() || Thread.currentThread().isInterrupted) {
                             return null
                         }
                         output.write(buffer, 0, read)
@@ -632,7 +650,7 @@ class PrefetchCacheManager(
                     output.fd.sync()
                 }
             }
-            if (entry.cancelled.get() || Thread.currentThread().isInterrupted) {
+            if (entry.isCancelled() || Thread.currentThread().isInterrupted) {
                 return null
             }
             if (written <= 0L) {
@@ -644,7 +662,7 @@ class PrefetchCacheManager(
 
             val target = binFileForKey(key, folderHash)
             synchronized(ioLock) {
-                if (entry.cancelled.get() || Thread.currentThread().isInterrupted || !partFile.exists()) {
+                if (entry.isCancelled() || Thread.currentThread().isInterrupted || !partFile.exists()) {
                     return null
                 }
                 if (target.exists() && target.length() == written) {
@@ -665,7 +683,6 @@ class PrefetchCacheManager(
         } catch (_: Throwable) {
             return null
         } finally {
-            entry.activeStream.compareAndSet(stream, null)
             if (!succeeded) {
                 runCatching { partFile.delete() }
             }
@@ -731,6 +748,9 @@ class PrefetchCacheManager(
         private const val FOLDER_HASH_HEX_LEN = 16
         const val MIN_PHYSICAL_FREE_BYTES = 512L * 1024L * 1024L
         const val CAPACITY_SCAN_MAX_DEPTH = 50
+
+        @Volatile
+        var customThreadFactory: ((String, Runnable) -> Thread)? = null
 
         @Volatile
         private var sharedInstance: PrefetchCacheManager? = null

@@ -16,11 +16,14 @@ import org.junit.rules.TemporaryFolder
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.InputStream
+import java.util.Collections
 import java.util.concurrent.Callable
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 
 class PrefetchCacheManagerTest {
 
@@ -294,32 +297,41 @@ class PrefetchCacheManagerTest {
         val cfg = ModuleConfig(prefetchLimitMode = PrefetchLimitMode.COUNT_ONLY, prefetchCount = 1)
         val blockingOpened = CountDownLatch(1)
         val blockedReadCancelled = CountDownLatch(1)
+        val sawInterrupt = AtomicBoolean(false)
+        val closeThreadRef = AtomicReference<Thread?>(null)
 
         val slowStream = object : InputStream() {
             @Volatile
             var closed = false
+
             override fun read(): Int {
+                val b = ByteArray(1)
+                val n = read(b, 0, 1)
+                return if (n <= 0) -1 else (b[0].toInt() and 0xFF)
+            }
+
+            override fun read(b: ByteArray, off: Int, len: Int): Int {
                 blockingOpened.countDown()
-                while (!closed && !Thread.currentThread().isInterrupted) {
-                    try {
-                        Thread.sleep(20)
-                    } catch (_: InterruptedException) {
-                        Thread.currentThread().interrupt()
-                        break
-                    }
+                if (Thread.currentThread().isInterrupted) {
+                    sawInterrupt.set(true)
+                    return -1
                 }
-                blockedReadCancelled.countDown()
-                return -1
+                Thread.sleep(15)
+                if (len <= 0) return 0
+                b[off] = 0x2A
+                return 1
             }
 
             override fun close() {
                 closed = true
+                closeThreadRef.set(Thread.currentThread())
+                blockedReadCancelled.countDown()
             }
         }
 
         val items = listOf(
             PrefetchItem("c", "/0.jpg", 1L, 4L, isRemote = true, opener = { ByteArrayInputStream(byteArrayOf(1, 2, 3, 4)) }),
-            PrefetchItem("c", "/1.jpg", 1L, 100L, isRemote = true, opener = { slowStream }),
+            PrefetchItem("c", "/1.jpg", 1L, 1_000_000L, isRemote = true, opener = { slowStream }),
             PrefetchItem("c", "/2.jpg", 1L, 4L, isRemote = true, opener = { ByteArrayInputStream(byteArrayOf(5, 6, 7, 8)) }),
             PrefetchItem("c", "/3.jpg", 1L, 4L, isRemote = true, opener = { ByteArrayInputStream(byteArrayOf(9, 10, 11, 12)) }),
             PrefetchItem("c", "/4.jpg", 1L, 4L, isRemote = true, opener = { ByteArrayInputStream(byteArrayOf(1, 1, 1, 1)) })
@@ -341,6 +353,9 @@ class PrefetchCacheManagerTest {
             assertTrue(blockedReadCancelled.await(5, TimeUnit.SECONDS))
             waitUntilSettled(manager)
 
+            assertFalse("Worker thread must not be interrupted on cooperative cancel", sawInterrupt.get())
+            assertTrue(slowStream.closed)
+            assertNotEquals("Stream must close on worker thread, not caller thread", Thread.currentThread(), closeThreadRef.get())
             assertNull(manager.peekCachedFile(items[1]))
             assertNotNull(manager.peekCachedFile(items[4]))
             assertNotNull(manager.peekCachedFile(items[2]))
@@ -390,33 +405,40 @@ class PrefetchCacheManagerTest {
         val cfg = ModuleConfig(prefetchLimitMode = PrefetchLimitMode.COUNT_ONLY, prefetchCount = 2)
         val blockingOpened = CountDownLatch(1)
         val blockedReadCancelled = CountDownLatch(1)
+        val sawInterrupt = AtomicBoolean(false)
 
         val slowStream = object : InputStream() {
             @Volatile
             var closed = false
+
             override fun read(): Int {
+                val b = ByteArray(1)
+                val n = read(b, 0, 1)
+                return if (n <= 0) -1 else (b[0].toInt() and 0xFF)
+            }
+
+            override fun read(b: ByteArray, off: Int, len: Int): Int {
                 blockingOpened.countDown()
-                while (!closed && !Thread.currentThread().isInterrupted) {
-                    try {
-                        Thread.sleep(20)
-                    } catch (_: InterruptedException) {
-                        Thread.currentThread().interrupt()
-                        break
-                    }
+                if (Thread.currentThread().isInterrupted) {
+                    sawInterrupt.set(true)
+                    return -1
                 }
-                blockedReadCancelled.countDown()
-                return -1
+                Thread.sleep(15)
+                if (len <= 0) return 0
+                b[off] = 0x5A
+                return 1
             }
 
             override fun close() {
                 closed = true
+                blockedReadCancelled.countDown()
             }
         }
 
         val folderA = "SmbCatalog:nas|/photos/trip"
         val folderB = "SmbCatalog:nas|/photos/work"
         val itemA1 = PrefetchItem("SmbCatalog:nas", "/photos/trip/1.jpg", 1L, 4L, isRemote = true, opener = { ByteArrayInputStream(byteArrayOf(1, 2, 3, 4)) }, folderKey = folderA)
-        val itemA2 = PrefetchItem("SmbCatalog:nas", "/photos/trip/2.jpg", 1L, 100L, isRemote = true, opener = { slowStream }, folderKey = folderA)
+        val itemA2 = PrefetchItem("SmbCatalog:nas", "/photos/trip/2.jpg", 1L, 1_000_000L, isRemote = true, opener = { slowStream }, folderKey = folderA)
         val itemB1 = PrefetchItem("SmbCatalog:nas", "/photos/work/1.jpg", 1L, 4L, isRemote = true, opener = { ByteArrayInputStream(byteArrayOf(9, 8, 7, 6)) }, folderKey = folderB)
 
         val manager = PrefetchCacheManager(
@@ -460,6 +482,8 @@ class PrefetchCacheManagerTest {
             assertTrue(itemA1.cacheKey in evicted)
             assertTrue(itemA2.cacheKey in evicted)
             assertFalse(itemB1.cacheKey in evicted)
+            assertFalse("Eviction cancellation must be cooperative without interrupting worker", sawInterrupt.get())
+            assertTrue(slowStream.closed)
             assertNull(manager.peekCachedFile(itemA1))
             assertNull(manager.peekCachedFile(itemA2))
             assertNotNull(manager.peekCachedFile(itemB1))
@@ -571,6 +595,252 @@ class PrefetchCacheManagerTest {
             assertEquals("${FakeCatalog::class.java.name}:smb://nas|", FolderCacheLifecycleHook.canonicalFolderKeyFromElements(arrayOf(FakeIdCatalog("network"), smb), isCatalog))
             assertEquals("${FakeCatalog::class.java.name}:zip://pack|inner", FolderCacheLifecycleHook.canonicalFolderKeyFromElements(arrayOf(smb, "a.zip", archive, "inner"), isCatalog))
         } finally {
+            manager.shutdown()
+        }
+    }
+
+    private class FakeFxTaskThread(name: String, target: Runnable) : Thread(target, name) {
+        init {
+            priority = MIN_PRIORITY
+        }
+    }
+
+    @Test
+    fun customThreadFactoryControlsWorkerIdentityDuringStreamReadAndClose() {
+        val baseDir = tempFolder.newFolder("cache_custom_thread")
+        val cfg = ModuleConfig(
+            prefetchLimitMode = PrefetchLimitMode.COUNT_ONLY,
+            prefetchCount = 1,
+            prefetchConcurrency = 1
+        )
+        val openerThreadRef = AtomicReference<Thread?>(null)
+        val readThreads = Collections.synchronizedList(mutableListOf<Thread>())
+        val closeThreadRef = AtomicReference<Thread?>(null)
+        val payload = "FX_TASK_THREAD_PAYLOAD".toByteArray()
+
+        PrefetchCacheManager.customThreadFactory = { name, runnable ->
+            FakeFxTaskThread(name, runnable)
+        }
+
+        val currentItem = PrefetchItem("smb://nas", "/0.jpg", 1L, 4L, isRemote = true, opener = { ByteArrayInputStream(byteArrayOf(1, 2, 3, 4)) })
+        val targetItem = PrefetchItem(
+            catalogIdentity = "smb://nas",
+            path = "/1.jpg",
+            lastModifiedMs = 2L,
+            sizeBytes = payload.size.toLong(),
+            isRemote = true,
+            opener = {
+                openerThreadRef.set(Thread.currentThread())
+                val delegate = ByteArrayInputStream(payload)
+                object : InputStream() {
+                    override fun read(): Int {
+                        readThreads.add(Thread.currentThread())
+                        return delegate.read()
+                    }
+
+                    override fun read(b: ByteArray, off: Int, len: Int): Int {
+                        readThreads.add(Thread.currentThread())
+                        return delegate.read(b, off, len)
+                    }
+
+                    override fun close() {
+                        closeThreadRef.set(Thread.currentThread())
+                        delegate.close()
+                    }
+                }
+            }
+        )
+
+        val manager = PrefetchCacheManager(
+            baseCacheDir = baseDir,
+            configProvider = { cfg },
+            storageSpaceProvider = { 4L * 1024L * 1024L * 1024L }
+        )
+        try {
+            manager.scheduleWindow(listOf(currentItem, targetItem), currentIndex = 0, direction = 1)
+            waitUntilSettled(manager)
+
+            val openerThread = openerThreadRef.get()
+            val closeThread = closeThreadRef.get()
+            assertTrue("Opener must run on custom TaskThread", openerThread is FakeFxTaskThread)
+            assertTrue("At least one read must execute on custom TaskThread", readThreads.isNotEmpty() && readThreads.all { it is FakeFxTaskThread })
+            assertTrue("Close must run on custom TaskThread", closeThread is FakeFxTaskThread)
+            assertTrue("Opener and close must run on same TaskThread", openerThread === closeThread)
+            assertTrue("Worker thread must be daemon", closeThread!!.isDaemon)
+            assertEquals(Thread.NORM_PRIORITY - 1, closeThread.priority)
+
+            val cached = manager.peekCachedFile(targetItem)
+            assertNotNull(cached)
+            assertEquals(String(payload), String(cached!!.readBytes()))
+        } finally {
+            manager.shutdown()
+            PrefetchCacheManager.customThreadFactory = null
+        }
+    }
+
+    @Test
+    fun cooperativeCancellationDoesNotInterruptOrCloseOnCallerThread() {
+        val baseDir = tempFolder.newFolder("cache_coop_cancel")
+        val cfg = ModuleConfig(
+            prefetchLimitMode = PrefetchLimitMode.COUNT_ONLY,
+            prefetchCount = 1,
+            prefetchConcurrency = 1
+        )
+        PrefetchCacheManager.customThreadFactory = { name, runnable ->
+            FakeFxTaskThread(name, runnable)
+        }
+
+        fun runCancelScenario(triggerForceCancel: Boolean) {
+            val inSecondChunkRead = CountDownLatch(1)
+            val allowSecondChunkExit = CountDownLatch(1)
+            val streamClosed = CountDownLatch(1)
+            val closeThreadRef = AtomicReference<Thread?>(null)
+            val readInterrupted = AtomicBoolean(false)
+            val closeInterrupted = AtomicBoolean(false)
+            val closedFlag = AtomicBoolean(false)
+            val readCalls = AtomicInteger(0)
+
+            val blockingChunkStream = object : InputStream() {
+                override fun read(): Int {
+                    val buf = ByteArray(1)
+                    val n = read(buf, 0, 1)
+                    return if (n <= 0) -1 else (buf[0].toInt() and 0xFF)
+                }
+
+                override fun read(b: ByteArray, off: Int, len: Int): Int {
+                    if (Thread.currentThread().isInterrupted) {
+                        readInterrupted.set(true)
+                        return -1
+                    }
+                    val call = readCalls.incrementAndGet()
+                    if (call == 1) {
+                        b[off] = 0x11
+                        return 1
+                    }
+                    inSecondChunkRead.countDown()
+                    try {
+                        allowSecondChunkExit.await(5, TimeUnit.SECONDS)
+                    } catch (_: InterruptedException) {
+                        readInterrupted.set(true)
+                        Thread.currentThread().interrupt()
+                        return -1
+                    }
+                    if (Thread.currentThread().isInterrupted) {
+                        readInterrupted.set(true)
+                    }
+                    b[off] = 0x22
+                    return 1
+                }
+
+                override fun close() {
+                    closedFlag.set(true)
+                    closeThreadRef.set(Thread.currentThread())
+                    closeInterrupted.set(Thread.currentThread().isInterrupted)
+                    streamClosed.countDown()
+                }
+            }
+
+            val items = listOf(
+                PrefetchItem("smb://coop", "/0.jpg", 1L, 4L, isRemote = true, opener = { ByteArrayInputStream(byteArrayOf(1, 2, 3, 4)) }),
+                PrefetchItem("smb://coop", "/target_$triggerForceCancel.jpg", 1L, 4096L, isRemote = true, opener = { blockingChunkStream }),
+                PrefetchItem("smb://coop", "/2.jpg", 1L, 4L, isRemote = true, opener = { ByteArrayInputStream(byteArrayOf(5, 6, 7, 8)) }),
+                PrefetchItem("smb://coop", "/3.jpg", 1L, 4L, isRemote = true, opener = { ByteArrayInputStream(byteArrayOf(9, 10, 11, 12)) }),
+                PrefetchItem("smb://coop", "/4.jpg", 1L, 4L, isRemote = true, opener = { ByteArrayInputStream(byteArrayOf(1, 1, 1, 1)) })
+            )
+
+            val manager = PrefetchCacheManager(
+                baseCacheDir = File(baseDir, "case_$triggerForceCancel"),
+                configProvider = { cfg },
+                storageSpaceProvider = { 4L * 1024L * 1024L * 1024L }
+            )
+            try {
+                manager.scheduleWindow(items, currentIndex = 0, direction = 1)
+                assertTrue(inSecondChunkRead.await(5, TimeUnit.SECONDS))
+
+                val callerThread = Thread.currentThread()
+                if (triggerForceCancel) {
+                    manager.invalidate(items[1].cacheKey)
+                } else {
+                    manager.scheduleWindow(items, currentIndex = 3, direction = 1)
+                }
+
+                // Caller thread must NEVER invoke close() synchronously on the active stream.
+                assertFalse("Stream must not be closed synchronously on caller thread", closedFlag.get())
+
+                allowSecondChunkExit.countDown()
+                assertTrue(streamClosed.await(5, TimeUnit.SECONDS))
+                waitUntilSettled(manager)
+
+                assertFalse("Worker thread must not be interrupted during read", readInterrupted.get())
+                assertFalse("Worker thread must not be interrupted at close", closeInterrupted.get())
+                assertTrue("Close must occur on custom TaskThread", closeThreadRef.get() is FakeFxTaskThread)
+                assertNotEquals(callerThread, closeThreadRef.get())
+                assertNull(manager.peekCachedFile(items[1]))
+
+                val leftoverParts = manager.cacheRoot.listFiles()?.filter { ".part" in it.name }.orEmpty()
+                assertTrue("No .part files should remain after cooperative cancel", leftoverParts.isEmpty())
+            } finally {
+                manager.shutdown()
+            }
+        }
+
+        try {
+            runCancelScenario(triggerForceCancel = false)
+            runCancelScenario(triggerForceCancel = true)
+        } finally {
+            PrefetchCacheManager.customThreadFactory = null
+        }
+    }
+
+    @Test
+    fun foregroundAwaitJoinsActiveDownloadWithoutBeingCancelledBySwipe() {
+        val baseDir = tempFolder.newFolder("cache_fg_join")
+        val cfg = ModuleConfig(prefetchLimitMode = PrefetchLimitMode.COUNT_ONLY, prefetchCount = 1)
+        val payload = "FOREGROUND_WAITER_SURVIVES_SWIPE".toByteArray()
+        val opened = CountDownLatch(1)
+        val allowFinish = CountDownLatch(1)
+
+        val items = listOf(
+            PrefetchItem("smb://fg", "/0.jpg", 1L, 4L, isRemote = true, opener = { ByteArrayInputStream(byteArrayOf(1, 2, 3, 4)) }),
+            PrefetchItem(
+                "smb://fg",
+                "/1.jpg",
+                1L,
+                payload.size.toLong(),
+                isRemote = true,
+                opener = {
+                    opened.countDown()
+                    allowFinish.await(5, TimeUnit.SECONDS)
+                    ByteArrayInputStream(payload)
+                }
+            ),
+            PrefetchItem("smb://fg", "/2.jpg", 1L, 4L, isRemote = true, opener = { ByteArrayInputStream(byteArrayOf(5, 6, 7, 8)) }),
+            PrefetchItem("smb://fg", "/3.jpg", 1L, 4L, isRemote = true, opener = { ByteArrayInputStream(byteArrayOf(9, 10, 11, 12)) })
+        )
+
+        val manager = PrefetchCacheManager(
+            baseCacheDir = baseDir,
+            configProvider = { cfg },
+            storageSpaceProvider = { 4L * 1024L * 1024L * 1024L }
+        )
+        val fgExecutor = Executors.newSingleThreadExecutor()
+        try {
+            manager.scheduleWindow(items, currentIndex = 0, direction = 1)
+            assertTrue(opened.await(5, TimeUnit.SECONDS))
+
+            val fgFuture = fgExecutor.submit(Callable { manager.awaitOrDownload(items[1]) })
+            Thread.sleep(60)
+
+            // Swipe out of window for items[1] while foreground waiter is active -> must NOT cancel items[1].
+            manager.scheduleWindow(items, currentIndex = 3, direction = 1)
+            Thread.sleep(30)
+            allowFinish.countDown()
+
+            val file = fgFuture.get(5, TimeUnit.SECONDS)
+            assertNotNull("Foreground waiter must still receive active download result", file)
+            assertEquals(String(payload), String(file!!.readBytes()))
+        } finally {
+            fgExecutor.shutdownNow()
             manager.shutdown()
         }
     }
