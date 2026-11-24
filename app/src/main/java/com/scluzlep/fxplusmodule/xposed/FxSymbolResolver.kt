@@ -120,7 +120,20 @@ object FxDexContracts {
             "nextapp.fx.ui.content.h0",
             "nextapp.fx.ui.content.e2",
             "nextapp.fx.ui.content.e0",
-            "v8.f"
+            "v8.f",
+            "nextapp.fx.ui.homecontent.HomeContentView",
+            "nextapp.fx.ui.homecontent.HomeContentView\$d",
+            "nextapp.fx.ui.content.j0",
+            "le.t",
+            "le.f0",
+            "le.r",
+            "le.b\$a",
+            "le.z",
+            "le.b0",
+            "nextapp.fx.ui.res.ActionIcons",
+            "nextapp.fx.plus.ui.net.cloud.GoogleDriveAuthActivity",
+            "nextapp.fx.plus.dirimpl.googledrive.b\$a",
+            "ic.e\$a"
         ).toList()
 
         val methods = listOf(
@@ -308,7 +321,23 @@ object FxDexContracts {
             DexMethodSpec("nextapp.fx.ui.content.e2", "getPath", "()Lse/f;", false),
             DexMethodSpec("nextapp.fx.ui.content.e0", "getPath", "()Lse/f;", false),
             DexMethodSpec("se.f", "C", "()Lse/f;", false),
-            DexMethodSpec("se.f", "g", "()[Ljava/lang/Object;", false)
+            DexMethodSpec("se.f", "g", "()[Ljava/lang/Object;", false),
+
+            // Live FX theme palette, Home overflow menu, and Google Drive OAuth (v1.3)
+            DexMethodSpec("xc.f", "P", "()I", false),
+            DexMethodSpec("xc.f", "N", "()I", false),
+            DexMethodSpec("xc.f", "O", "()I", false),
+            DexMethodSpec("nextapp.fx.ui.homecontent.HomeContentView\$d", "p", "(Lle/t;Lle/t;Lnextapp/fx/ui/content/k0;)V", false),
+            DexMethodSpec("le.t", "f", "(Lle/z;)V", false),
+            DexMethodSpec("le.t", "size", "()I", false),
+            DexMethodSpec("le.t", "item", "(I)Lle/z;", false),
+            DexMethodSpec("le.b0", "getTitle", "()Ljava/lang/CharSequence;", false),
+            DexMethodSpec("le.f0", "<init>", "()V", false),
+            DexMethodSpec("le.r", "<init>", "(Ljava/lang/CharSequence;Landroid/graphics/drawable/Drawable;Lle/b\$a;)V", false),
+            DexMethodSpec("nextapp.fx.ui.res.ActionIcons", "d", "(Landroid/content/res/Resources;Ljava/lang/String;Z)Landroid/graphics/drawable/Drawable;", true),
+            DexMethodSpec("nextapp.fx.plus.ui.net.cloud.GoogleDriveAuthActivity", "onCreate", "(Landroid/os/Bundle;)V", false),
+            DexMethodSpec("nextapp.fx.plus.dirimpl.googledrive.b\$a", "c", "(Landroid/content/Context;)Ljava/lang/String;", true),
+            DexMethodSpec("ic.e\$a", "<init>", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V", false)
         )
 
         val fields = listOf(
@@ -384,7 +413,20 @@ object FxDexContracts {
             DexFieldSpec("nextapp.fx.ui.content.r", "r5", "Lnextapp/fx/ui/content/h0;", false),
             DexFieldSpec("nextapp.fx.ui.content.h0", "f", "Ljava/util/List;", false),
             DexFieldSpec("nextapp.fx.ui.content.e0", "Y", "Lse/f;", false),
-            DexFieldSpec("se.f", "f", "[Ljava/lang/Object;", false)
+            DexFieldSpec("se.f", "f", "[Ljava/lang/Object;", false),
+
+            // Live FX theme palette, Home overflow menu, and Google Drive OAuth (v1.3)
+            DexFieldSpec("xc.f", "j", "Z", false),
+            DexFieldSpec("xc.f", "l", "I", false),
+            DexFieldSpec("xc.f", "k", "I", false),
+            DexFieldSpec("xc.f", "x", "I", false),
+            DexFieldSpec("xc.f", "y", "I", false),
+            DexFieldSpec("nextapp.fx.ui.homecontent.HomeContentView", "activity", "Lnextapp/fx/ui/content/r;", false),
+            DexFieldSpec("nextapp.fx.ui.homecontent.HomeContentView", "res", "Landroid/content/res/Resources;", false),
+            DexFieldSpec("nextapp.fx.ui.homecontent.HomeContentView\$d", "d", "Lnextapp/fx/ui/homecontent/HomeContentView;", false),
+            DexFieldSpec("nextapp.fx.ui.content.j0", "b", "Z", false),
+            DexFieldSpec("ic.e\$a", "a", "Ljava/lang/String;", false),
+            DexFieldSpec("ic.e\$a", "b", "Ljava/lang/String;", false)
         )
 
         return VersionContract(ConfigContract.FX_VERSION_CODE_9012, classes, methods, fields)
@@ -467,7 +509,21 @@ object FxDexContracts {
             "nextapp.fx.ui.content.w",
             "nextapp.fx.ui.content.c1",
             "nextapp.fx.ui.content.p",
-            "pa.c"
+            "pa.c",
+            "nextapp.fx.ui.homecontent.HomeContentView",
+            "be.p",
+            "nextapp.fx.ui.content.b0",
+            "yg.r",
+            "yg.y",
+            "yg.p",
+            "yg.b",
+            "yg.u",
+            "yg.w",
+            "nextapp.fx.ui.res.ActionIcons",
+            "nextapp.fx.plus.ui.net.cloud.GoogleDriveAuthActivity",
+            "gg.d",
+            "jh.b",
+            "d4.b"
         ).toList()
 
         val methods = listOf(
@@ -626,7 +682,21 @@ object FxDexContracts {
             DexMethodSpec("nextapp.fx.ui.content.w", "l", "(Lnextapp/fx/ui/content/c1;)V", false),
             DexMethodSpec("nextapp.fx.ui.content.c1", "v", "(Lhh/f;)V", false),
             DexMethodSpec("nextapp.fx.ui.content.c1", "g", "()Lnextapp/fx/ui/content/p;", false),
-            DexMethodSpec("hh.f", "G", "()Lhh/f;", false)
+            DexMethodSpec("hh.f", "G", "()Lhh/f;", false),
+
+            // Live FX theme palette, Home overflow menu, and Google Drive OAuth (v1.3)
+            DexMethodSpec("ef.g", "w", "()I", false),
+            DexMethodSpec("ef.g", "u", "()I", false),
+            DexMethodSpec("ef.g", "v", "()I", false),
+            DexMethodSpec("be.p", "m", "(Lyg/r;Lyg/r;I)V", false),
+            DexMethodSpec("yg.r", "d", "(Lyg/u;)V", false),
+            DexMethodSpec("yg.w", "getTitle", "()Ljava/lang/CharSequence;", false),
+            DexMethodSpec("yg.y", "isVisible", "()Z", false),
+            DexMethodSpec("yg.p", "<init>", "(Ljava/lang/CharSequence;Landroid/graphics/drawable/Drawable;Lyg/b;)V", false),
+            DexMethodSpec("nextapp.fx.ui.res.ActionIcons", "b", "(Landroid/content/res/Resources;Ljava/lang/String;I)Lsa/h;", true),
+            DexMethodSpec("nextapp.fx.plus.ui.net.cloud.GoogleDriveAuthActivity", "onCreate", "(Landroid/os/Bundle;)V", false),
+            DexMethodSpec("gg.d", "<init>", "(Ld4/b;Landroid/net/Uri;)V", false),
+            DexMethodSpec("jh.b", "<init>", "(ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;)V", false)
         )
 
         val fields = listOf(
@@ -726,7 +796,23 @@ object FxDexContracts {
             DexFieldSpec("nextapp.fx.ui.content.k", "n2", "Lnextapp/fx/ui/content/w;", false),
             DexFieldSpec("nextapp.fx.ui.content.w", "f", "Ljava/util/ArrayList;", false),
             DexFieldSpec("nextapp.fx.ui.content.p", "Y", "Lhh/f;", false),
-            DexFieldSpec("hh.f", "f", "[Ljava/lang/Object;", false)
+            DexFieldSpec("hh.f", "f", "[Ljava/lang/Object;", false),
+
+            // Live FX theme palette, Home overflow menu, and Google Drive OAuth (v1.3)
+            DexFieldSpec("ef.g", "j", "Z", false),
+            DexFieldSpec("ef.g", "l", "I", false),
+            DexFieldSpec("ef.g", "k", "I", false),
+            DexFieldSpec("ef.g", "v", "I", false),
+            DexFieldSpec("ef.g", "w", "I", false),
+            DexFieldSpec("nextapp.fx.ui.homecontent.HomeContentView", "activity", "Lnextapp/fx/ui/content/k;", false),
+            DexFieldSpec("nextapp.fx.ui.homecontent.HomeContentView", "res", "Landroid/content/res/Resources;", false),
+            DexFieldSpec("be.p", "c", "I", false),
+            DexFieldSpec("be.p", "d", "Lnextapp/fx/ui/content/u;", false),
+            DexFieldSpec("nextapp.fx.ui.content.b0", "b", "Z", false),
+            DexFieldSpec("yg.r", "d", "Ljava/util/ArrayList;", false),
+            DexFieldSpec("gg.d", "a", "Ljava/lang/String;", false),
+            DexFieldSpec("jh.b", "a", "Ljava/lang/String;", false),
+            DexFieldSpec("jh.b", "b", "Ljava/lang/String;", false)
         )
 
         return VersionContract(ConfigContract.FX_VERSION_CODE_9108, classes, methods, fields)
@@ -847,7 +933,49 @@ data class NativeSettingsBindings(
     val fxDialogAddLabeledView: Method?,
     val fxDialogIsBackgroundLight: Method?,
     val fxDialogDismiss: Method?,
-    val fxDialogShow: Method?
+    val fxDialogShow: Method?,
+    val fxDialogUiField: Field?,
+    val uiGetForContext: Method?,
+    val uiIsWindowLightField: Field?,
+    val uiTextPrimaryField: Field?,
+    val uiTextSecondaryField: Field?,
+    val uiBoxBgField: Field?,
+    val uiBoxPressedBgField: Field?,
+    val uiWindowBgMethod: Method?,
+    val uiTrimAccentMethod: Method?,
+    val uiTrimBaseMethod: Method?
+)
+
+data class HomeMenuBindings(
+    val homeContentViewClass: Class<*>?,
+    val homeViewActivityField: Field?,
+    val homeViewResField: Field?,
+    val menuContribClass: Class<*>?,
+    val menuContribCaseField: Field?,
+    val menuContribOwnerField: Field?,
+    val menuContribBgLightField: Field?,
+    val menuContribPopulateMethod: Method?,
+    val menuModelAddItemMethod: Method?,
+    val menuModelSizeMethod: Method?,
+    val menuModelItemMethod: Method?,
+    val menuModelItemsListField: Field?,
+    val menuItemGetTitleMethod: Method?,
+    val menuDividerClass: Class<*>?,
+    val menuDividerCtor: Constructor<*>?,
+    val menuActionCtor: Constructor<*>?,
+    val menuClickListenerInterface: Class<*>?,
+    val actionIconsCreateMethod: Method?
+)
+
+data class GoogleDriveBindings(
+    val authActivityOnCreate: Method?,
+    val getClientId9012: Method?,
+    val tokenCredsCtor9012: Constructor<*>?,
+    val authReqBuilderCtor9108: Constructor<*>?,
+    val authReqClientIdField9108: Field?,
+    val tokenCredsCtor9108: Constructor<*>?,
+    val tokenCredsClientIdField9108: Field?,
+    val tokenCredsClientSecretField9108: Field?
 )
 
 data class AndroidDataBindings(
@@ -950,7 +1078,9 @@ data class ResolvedSymbols(
     val settings: NativeSettingsBindings,
     val androidData: AndroidDataBindings,
     val bonusLimits: BonusLimitsBindings,
-    val folderLifecycle: FolderLifecycleBindings
+    val folderLifecycle: FolderLifecycleBindings,
+    val homeMenu: HomeMenuBindings,
+    val googleDrive: GoogleDriveBindings
 )
 
 /**
@@ -1163,6 +1293,7 @@ object FxSymbolResolver {
         val fxDialogBaseClass = loadClass(cl, "nextapp.fx.ui.widget.m0")
         val fxDialogStyleClass = loadClass(cl, "nextapp.fx.ui.widget.k\$f")
         val defaultWithClose = runCatching { declaredField(fxDialogStyleClass, "Z")?.get(null) }.getOrNull()
+        val uiThemeClass = loadClass(cl, "xc.f")
 
         val settings = NativeSettingsBindings(
             mainPrefOnCreate = declaredMethod(mainPrefClass, "onCreate", android.os.Bundle::class.java),
@@ -1176,7 +1307,17 @@ object FxSymbolResolver {
             fxDialogAddLabeledView = declaredMethod(fxDialogClass, "addLabeledView", CharSequence::class.java, android.view.View::class.java),
             fxDialogIsBackgroundLight = declaredMethod(fxDialogClass, "isBackgroundLight"),
             fxDialogDismiss = declaredMethod(fxDialogClass, "dismiss"),
-            fxDialogShow = declaredMethod(fxDialogBaseClass, "show")
+            fxDialogShow = declaredMethod(fxDialogBaseClass, "show"),
+            fxDialogUiField = declaredField(fxDialogClass, "ui"),
+            uiGetForContext = declaredMethod(uiThemeClass, "e", Context::class.java),
+            uiIsWindowLightField = declaredField(uiThemeClass, "j"),
+            uiTextPrimaryField = declaredField(uiThemeClass, "l"),
+            uiTextSecondaryField = declaredField(uiThemeClass, "k"),
+            uiBoxBgField = declaredField(uiThemeClass, "x"),
+            uiBoxPressedBgField = declaredField(uiThemeClass, "y"),
+            uiWindowBgMethod = declaredMethod(uiThemeClass, "P"),
+            uiTrimAccentMethod = declaredMethod(uiThemeClass, "N"),
+            uiTrimBaseMethod = declaredMethod(uiThemeClass, "O")
         )
 
         val fileCatalogClass = loadClass(cl, "nextapp.fx.dirimpl.file.FileCatalog")
@@ -1290,6 +1431,68 @@ object FxSymbolResolver {
             dirCatalogClass = dirCatalogClass
         )
 
+        val homeContentViewClass = loadClass(cl, "nextapp.fx.ui.homecontent.HomeContentView")
+        val homeMenuContribClass = loadClass(cl, "nextapp.fx.ui.homecontent.HomeContentView\$d")
+        val menuContribBaseClass = loadClass(cl, "nextapp.fx.ui.content.j0")
+        val menuModelClass = loadClass(cl, "le.t")
+        val menuItemBaseInterface = loadClass(cl, "le.z")
+        val menuItemTitledInterface = loadClass(cl, "le.b0")
+        val menuDividerClass = loadClass(cl, "le.f0")
+        val menuActionClass = loadClass(cl, "le.r")
+        val menuClickListenerInterface = loadClass(cl, "le.b\$a")
+        val menuOrderEnumClass = loadClass(cl, "nextapp.fx.ui.content.k0")
+        val actionIconsClass = loadClass(cl, "nextapp.fx.ui.res.ActionIcons")
+
+        val homeMenu = HomeMenuBindings(
+            homeContentViewClass = homeContentViewClass,
+            homeViewActivityField = declaredField(homeContentViewClass, "activity"),
+            homeViewResField = declaredField(homeContentViewClass, "res"),
+            menuContribClass = homeMenuContribClass,
+            menuContribCaseField = null,
+            menuContribOwnerField = declaredField(homeMenuContribClass, "d")
+                ?: declaredField(homeMenuContribClass, "this\$0")
+                ?: homeMenuContribClass?.declaredFields?.firstOrNull { it.type == homeContentViewClass }
+                    ?.apply { isAccessible = true },
+            menuContribBgLightField = declaredField(menuContribBaseClass, "b"),
+            menuContribPopulateMethod = declaredMethod(homeMenuContribClass, "p", menuModelClass, menuModelClass, menuOrderEnumClass),
+            menuModelAddItemMethod = declaredMethod(menuModelClass, "f", menuItemBaseInterface),
+            menuModelSizeMethod = declaredMethod(menuModelClass, "size"),
+            menuModelItemMethod = declaredMethod(menuModelClass, "item", Int::class.javaPrimitiveType),
+            menuModelItemsListField = null,
+            menuItemGetTitleMethod = declaredMethod(menuItemTitledInterface, "getTitle"),
+            menuDividerClass = menuDividerClass,
+            menuDividerCtor = declaredConstructor(menuDividerClass),
+            menuActionCtor = declaredConstructor(
+                menuActionClass,
+                CharSequence::class.java,
+                android.graphics.drawable.Drawable::class.java,
+                menuClickListenerInterface
+            ),
+            menuClickListenerInterface = menuClickListenerInterface,
+            actionIconsCreateMethod = declaredMethod(
+                actionIconsClass,
+                "d",
+                android.content.res.Resources::class.java,
+                String::class.java,
+                Boolean::class.javaPrimitiveType
+            )
+        )
+
+        val gdriveAuthActivityClass = loadClass(cl, "nextapp.fx.plus.ui.net.cloud.GoogleDriveAuthActivity")
+        val gdriveIdHolderClass = loadClass(cl, "nextapp.fx.plus.dirimpl.googledrive.b\$a")
+        val gdriveTokenCredsClass = loadClass(cl, "ic.e\$a")
+
+        val googleDrive = GoogleDriveBindings(
+            authActivityOnCreate = declaredMethod(gdriveAuthActivityClass, "onCreate", android.os.Bundle::class.java),
+            getClientId9012 = declaredMethod(gdriveIdHolderClass, "c", Context::class.java),
+            tokenCredsCtor9012 = declaredConstructor(gdriveTokenCredsClass, String::class.java, String::class.java, String::class.java),
+            authReqBuilderCtor9108 = null,
+            authReqClientIdField9108 = null,
+            tokenCredsCtor9108 = null,
+            tokenCredsClientIdField9108 = null,
+            tokenCredsClientSecretField9108 = null
+        )
+
         return ResolvedSymbols(
             profile = FxProfile.FX_9012,
             versionCode = versionCode,
@@ -1300,7 +1503,9 @@ object FxSymbolResolver {
             settings = settings,
             androidData = androidData,
             bonusLimits = bonusLimits,
-            folderLifecycle = folderLifecycle
+            folderLifecycle = folderLifecycle,
+            homeMenu = homeMenu,
+            googleDrive = googleDrive
         )
     }
 
@@ -1455,6 +1660,7 @@ object FxSymbolResolver {
         val fxDialogBaseClass = loadClass(cl, "nextapp.fx.ui.widget.g0")
         val fxDialogStyleClass = loadClass(cl, "nextapp.fx.ui.widget.m")
         val defaultWithClose = runCatching { declaredField(fxDialogStyleClass, "Z")?.get(null) }.getOrNull()
+        val uiThemeClass = loadClass(cl, "ef.g")
 
         val settings = NativeSettingsBindings(
             mainPrefOnCreate = declaredMethod(mainPrefClass, "onCreate", android.os.Bundle::class.java),
@@ -1468,7 +1674,17 @@ object FxSymbolResolver {
             fxDialogAddLabeledView = declaredMethod(fxDialogClass, "addLabeledView", CharSequence::class.java, android.view.View::class.java),
             fxDialogIsBackgroundLight = declaredMethod(fxDialogClass, "isBackgroundLight"),
             fxDialogDismiss = declaredMethod(fxDialogClass, "dismiss"),
-            fxDialogShow = declaredMethod(fxDialogBaseClass, "show")
+            fxDialogShow = declaredMethod(fxDialogBaseClass, "show"),
+            fxDialogUiField = declaredField(fxDialogClass, "ui"),
+            uiGetForContext = declaredMethod(uiThemeClass, "b", Context::class.java),
+            uiIsWindowLightField = declaredField(uiThemeClass, "j"),
+            uiTextPrimaryField = declaredField(uiThemeClass, "l"),
+            uiTextSecondaryField = declaredField(uiThemeClass, "k"),
+            uiBoxBgField = declaredField(uiThemeClass, "v"),
+            uiBoxPressedBgField = declaredField(uiThemeClass, "w"),
+            uiWindowBgMethod = declaredMethod(uiThemeClass, "w"),
+            uiTrimAccentMethod = declaredMethod(uiThemeClass, "u"),
+            uiTrimBaseMethod = declaredMethod(uiThemeClass, "v")
         )
 
         val fileCatalogClass = loadClass(cl, "nextapp.fx.dirimpl.file.FileCatalog")
@@ -1585,6 +1801,71 @@ object FxSymbolResolver {
             dirCatalogClass = dirCatalogClass
         )
 
+        val homeContentViewClass = loadClass(cl, "nextapp.fx.ui.homecontent.HomeContentView")
+        val menuContribClass = loadClass(cl, "be.p")
+        val menuContribBaseClass = loadClass(cl, "nextapp.fx.ui.content.b0")
+        val menuModelClass = loadClass(cl, "yg.r")
+        val menuItemBaseInterface = loadClass(cl, "yg.u")
+        val menuItemTitledInterface = loadClass(cl, "yg.w")
+        val menuDividerClass = loadClass(cl, "yg.y")
+        val menuActionClass = loadClass(cl, "yg.p")
+        val menuClickListenerInterface = loadClass(cl, "yg.b")
+        val actionIconsClass = loadClass(cl, "nextapp.fx.ui.res.ActionIcons")
+
+        val homeMenu = HomeMenuBindings(
+            homeContentViewClass = homeContentViewClass,
+            homeViewActivityField = declaredField(homeContentViewClass, "activity"),
+            homeViewResField = declaredField(homeContentViewClass, "res"),
+            menuContribClass = menuContribClass,
+            menuContribCaseField = declaredField(menuContribClass, "c"),
+            menuContribOwnerField = declaredField(menuContribClass, "d"),
+            menuContribBgLightField = declaredField(menuContribBaseClass, "b"),
+            menuContribPopulateMethod = declaredMethod(menuContribClass, "m", menuModelClass, menuModelClass, Int::class.javaPrimitiveType),
+            menuModelAddItemMethod = declaredMethod(menuModelClass, "d", menuItemBaseInterface),
+            menuModelSizeMethod = null,
+            menuModelItemMethod = null,
+            menuModelItemsListField = declaredField(menuModelClass, "d"),
+            menuItemGetTitleMethod = declaredMethod(menuItemTitledInterface, "getTitle"),
+            menuDividerClass = menuDividerClass,
+            menuDividerCtor = declaredConstructor(menuDividerClass),
+            menuActionCtor = declaredConstructor(
+                menuActionClass,
+                CharSequence::class.java,
+                android.graphics.drawable.Drawable::class.java,
+                menuClickListenerInterface
+            ),
+            menuClickListenerInterface = menuClickListenerInterface,
+            actionIconsCreateMethod = declaredMethod(
+                actionIconsClass,
+                "b",
+                android.content.res.Resources::class.java,
+                String::class.java,
+                Int::class.javaPrimitiveType
+            )
+        )
+
+        val gdriveAuthActivityClass = loadClass(cl, "nextapp.fx.plus.ui.net.cloud.GoogleDriveAuthActivity")
+        val authReqBuilderClass = loadClass(cl, "gg.d")
+        val oauthServiceConfigClass = loadClass(cl, "d4.b")
+        val tokenCredsClass = loadClass(cl, "jh.b")
+
+        val googleDrive = GoogleDriveBindings(
+            authActivityOnCreate = declaredMethod(gdriveAuthActivityClass, "onCreate", android.os.Bundle::class.java),
+            getClientId9012 = null,
+            tokenCredsCtor9012 = null,
+            authReqBuilderCtor9108 = declaredConstructor(authReqBuilderClass, oauthServiceConfigClass, android.net.Uri::class.java),
+            authReqClientIdField9108 = declaredField(authReqBuilderClass, "a"),
+            tokenCredsCtor9108 = declaredConstructor(
+                tokenCredsClass,
+                Int::class.javaPrimitiveType,
+                String::class.java,
+                String::class.java,
+                String::class.java
+            ),
+            tokenCredsClientIdField9108 = declaredField(tokenCredsClass, "a"),
+            tokenCredsClientSecretField9108 = declaredField(tokenCredsClass, "b")
+        )
+
         return ResolvedSymbols(
             profile = FxProfile.FX_9108,
             versionCode = versionCode,
@@ -1595,7 +1876,9 @@ object FxSymbolResolver {
             settings = settings,
             androidData = androidData,
             bonusLimits = bonusLimits,
-            folderLifecycle = folderLifecycle
+            folderLifecycle = folderLifecycle,
+            homeMenu = homeMenu,
+            googleDrive = googleDrive
         )
     }
 
@@ -1629,7 +1912,17 @@ object FxSymbolResolver {
             fxDialogAddLabeledView = declaredMethod(dialogClass, "addLabeledView", CharSequence::class.java, android.view.View::class.java),
             fxDialogIsBackgroundLight = declaredMethod(dialogClass, "isBackgroundLight"),
             fxDialogDismiss = declaredMethod(dialogClass, "dismiss"),
-            fxDialogShow = dialogClass?.superclass?.let { declaredMethod(it, "show") }
+            fxDialogShow = dialogClass?.superclass?.let { declaredMethod(it, "show") },
+            fxDialogUiField = declaredField(dialogClass, "ui"),
+            uiGetForContext = null,
+            uiIsWindowLightField = null,
+            uiTextPrimaryField = null,
+            uiTextSecondaryField = null,
+            uiBoxBgField = null,
+            uiBoxPressedBgField = null,
+            uiWindowBgMethod = null,
+            uiTrimAccentMethod = null,
+            uiTrimBaseMethod = null
         )
 
         val sibling = SiblingBindings(
@@ -1725,6 +2018,39 @@ object FxSymbolResolver {
             dirCatalogClass = sibling.dirCatalogClass
         )
 
+        val homeMenu = HomeMenuBindings(
+            homeContentViewClass = loadClass(cl, "nextapp.fx.ui.homecontent.HomeContentView"),
+            homeViewActivityField = null,
+            homeViewResField = null,
+            menuContribClass = null,
+            menuContribCaseField = null,
+            menuContribOwnerField = null,
+            menuContribBgLightField = null,
+            menuContribPopulateMethod = null,
+            menuModelAddItemMethod = null,
+            menuModelSizeMethod = null,
+            menuModelItemMethod = null,
+            menuModelItemsListField = null,
+            menuItemGetTitleMethod = null,
+            menuDividerClass = null,
+            menuDividerCtor = null,
+            menuActionCtor = null,
+            menuClickListenerInterface = null,
+            actionIconsCreateMethod = null
+        )
+
+        val gdriveAuthActivityClass = loadClass(cl, "nextapp.fx.plus.ui.net.cloud.GoogleDriveAuthActivity")
+        val googleDrive = GoogleDriveBindings(
+            authActivityOnCreate = declaredMethod(gdriveAuthActivityClass, "onCreate", android.os.Bundle::class.java),
+            getClientId9012 = null,
+            tokenCredsCtor9012 = null,
+            authReqBuilderCtor9108 = null,
+            authReqClientIdField9108 = null,
+            tokenCredsCtor9108 = null,
+            tokenCredsClientIdField9108 = null,
+            tokenCredsClientSecretField9108 = null
+        )
+
         return ResolvedSymbols(
             profile = FxProfile.STRUCTURAL_FALLBACK,
             versionCode = versionCode,
@@ -1735,7 +2061,9 @@ object FxSymbolResolver {
             settings = settings,
             androidData = androidData,
             bonusLimits = bonusLimits,
-            folderLifecycle = folderLifecycle
+            folderLifecycle = folderLifecycle,
+            homeMenu = homeMenu,
+            googleDrive = googleDrive
         )
     }
 
