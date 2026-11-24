@@ -21,14 +21,12 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.view.View
+import io.github.libxposed.api.XposedInterface
 import java.io.BufferedInputStream
 import java.io.File
 import java.io.InputStream
 import java.lang.ref.WeakReference
-import java.lang.reflect.Constructor
-import java.lang.reflect.Field
 import java.lang.reflect.InvocationTargetException
-import java.lang.reflect.Method
 import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.ByteBuffer
@@ -235,62 +233,6 @@ object TouchImageHardwareHook {
         data object Fallback : GifDecodeResult
     }
 
-    private data class HardwareRenderBindings(
-        val touchClass: Class<*>?,
-        val setImageBitmap: Method?,
-        val setImageMovie: Method?,
-        val setImageNull: Method?,
-        val setPrescale: Method?,
-        val setTouchEnabled: Method?,
-        val zoomFit: Method?,
-        val onDraw: Method?,
-        val onDetachedFromWindow: Method?,
-        val updateBoundsMethod: Method?,
-        val enforceLayerOnBitmapMethod: Method?,
-        val bitmapField: Field?,
-        val movieField: Field?,
-        val moviePlayingField: Field?,
-        val movieThreadField: Field?,
-        val matrixField: Field?,
-        val paintField: Field?,
-        val cropArField: Field?,
-        val cropRectField: Field?,
-        val softwareLayerFlagField: Field?,
-        val displaySizeField: Field?,
-        val displaySizeWidthField: Field?,
-        val displaySizeHeightField: Field?,
-        val needsZoomFitField: Field?,
-        val imageDisplayClass: Class<*>?,
-        val deliverBitmapMethod: Method?,
-        val deliverMovieMethod: Method?,
-        val clearDisplayMethod: Method?,
-        val displayBitmapField: Field?,
-        val displayMovieField: Field?,
-        val displayDisposedField: Field?,
-        val displayFullLoadedField: Field?,
-        val displayPreviewLoadedField: Field?,
-        val viewerClass: Class<*>?,
-        val loadMediaMethod: Method?,
-        val loadGifMethod: Method?,
-        val applyBitmapResultMethod: Method?,
-        val imageResultCtor: Constructor<*>?,
-        val loadTokenField: Field?,
-        val isGifField: Field?,
-        val currentHolderField: Field?,
-        val enterTransitionField: Field?,
-        val transitionBgViewField: Field?,
-        val transitionTopBarField: Field?,
-        val transitionBottomBarField: Field?,
-        val transitionRunningField: Field?,
-        val transitionDoneField: Field?,
-        val uiHandlerField: Field?,
-        val holderFileItemField: Field?,
-        val holderUriField: Field?,
-        val gifAnimatedCheckMethod: Method?,
-        val localPathClass: Class<*>?,
-        val localPathMethod: Method?
-    )
-
     private val stateLock = Any()
     private val tileSessions = WeakHashMap<View, TileSession>()
     private val animatedGifStates = WeakHashMap<View, AnimatedGifState>()
@@ -414,10 +356,10 @@ object TouchImageHardwareHook {
         lastImageEnabled = runCatching { isHardwareImageEnabled() }.getOrDefault(true)
         lastGifEnabled = runCatching { isHardwareGifEnabled() }.getOrDefault(true)
 
-        val b = resolveBindings(symbols)
+        val b = symbols.hardwareRender
         bindings = b
 
-        installTouchDisplayHooks(symbols, installer, b)
+        installTouchDisplayHooks(installer, b)
         installGifHooks(symbols, installer, b)
     }
 
@@ -454,12 +396,11 @@ object TouchImageHardwareHook {
     private fun isHardwareGifEnabled(): Boolean = runCatching { hardwareGifPredicate() }.getOrDefault(true)
 
     private fun installTouchDisplayHooks(
-        symbols: ResolvedSymbols,
         installer: FxHookInstaller,
         b: HardwareRenderBindings
     ) {
-        if (symbols.profile == FxProfile.FX_9012) {
-            installer.install("hw:9012:TouchImageDisplay.g", b.enforceLayerOnBitmapMethod) { chain ->
+        if (b.enforceLayerOnBitmapMethod != null) {
+            installer.install("hw:TouchImageDisplay.enforceLayer", b.enforceLayerOnBitmapMethod) { chain ->
                 if (!isHardwareImageEnabled()) {
                     return@install chain.proceed()
                 }
@@ -487,9 +428,9 @@ object TouchImageHardwareHook {
                 return@install chain.proceed()
             }
 
-            if (symbols.profile == FxProfile.FX_9108) {
+            if (b.enforceLayerOnBitmapMethod == null && b.softwareLayerFlagField != null) {
                 val isOversize = newBitmap != null && (newBitmap.width > 2160 || newBitmap.height > 2160)
-                b.softwareLayerFlagField?.let { runCatching { it.setBoolean(view, isOversize) } }
+                runCatching { b.softwareLayerFlagField.setBoolean(view, isOversize) }
             }
 
             val result = chain.proceed()
@@ -617,19 +558,19 @@ object TouchImageHardwareHook {
             chain.proceed()
         }
 
-        when (symbols.profile) {
-            FxProfile.FX_9012 -> install9012GifHooks(symbols, installer, b)
-            FxProfile.FX_9108 -> install9108GifHooks(symbols, installer, b)
-            FxProfile.STRUCTURAL_FALLBACK -> Unit
+        if (b.loadGifMethod != null) {
+            installSplitGifHooks(symbols, installer, b)
+        } else if (b.loadMediaMethod != null) {
+            installUnifiedMediaGifHook(symbols, installer, b)
         }
     }
 
-    private fun install9012GifHooks(
+    private fun installSplitGifHooks(
         symbols: ResolvedSymbols,
         installer: FxHookInstaller,
         b: HardwareRenderBindings
     ) {
-        installer.install("hw:9012:l1", b.loadGifMethod) { chain ->
+        installer.install("hw:gif:loadGif", b.loadGifMethod) { chain ->
             if (!isHardwareGifEnabled()) {
                 return@install chain.proceed()
             }
@@ -644,29 +585,10 @@ object TouchImageHardwareHook {
                 return@install chain.proceed()
             }
 
-            when (val outcome = decodeGifFromItem(activity, symbols, b, item, uri)) {
-                is GifDecodeResult.Cancelled -> return@install null
-                is GifDecodeResult.Fallback -> return@install chain.proceed()
-                is GifDecodeResult.Decoded -> {
-                    val posted = deliverDecodedGifOnUi(
-                        activity = activity,
-                        display = display,
-                        holder = holder,
-                        token = token,
-                        drawable = outcome.drawable,
-                        symbols = symbols,
-                        b = b,
-                        installer = installer
-                    )
-                    if (!posted) {
-                        return@install chain.proceed()
-                    }
-                    null
-                }
-            }
+            decodeAndDeliverGif(activity, display, holder, token, item, uri, symbols, b, installer, chain)
         }
 
-        installer.install("hw:9012:j1.uriGif", b.loadMediaMethod) { chain ->
+        installer.install("hw:gif:loadMediaUri", b.loadMediaMethod) { chain ->
             if (!isHardwareGifEnabled()) {
                 return@install chain.proceed()
             }
@@ -684,42 +606,17 @@ object TouchImageHardwareHook {
                 return@install chain.proceed()
             }
 
-            val tokenField = b.loadTokenField ?: return@install chain.proceed()
-            val token = runCatching {
-                val next = tokenField.getInt(activity) + 1
-                tokenField.setInt(activity, next)
-                next
-            }.getOrNull() ?: return@install chain.proceed()
-
-            when (val outcome = decodeGifFromItem(activity, symbols, b, item = null, uri = uri)) {
-                is GifDecodeResult.Cancelled -> return@install null
-                is GifDecodeResult.Fallback -> return@install chain.proceed()
-                is GifDecodeResult.Decoded -> {
-                    val posted = deliverDecodedGifOnUi(
-                        activity = activity,
-                        display = display,
-                        holder = holder,
-                        token = token,
-                        drawable = outcome.drawable,
-                        symbols = symbols,
-                        b = b,
-                        installer = installer
-                    )
-                    if (!posted) {
-                        return@install chain.proceed()
-                    }
-                    null
-                }
-            }
+            val token = nextGifLoadToken(activity, b) ?: return@install chain.proceed()
+            decodeAndDeliverGif(activity, display, holder, token, item = null, uri = uri, symbols, b, installer, chain)
         }
     }
 
-    private fun install9108GifHooks(
+    private fun installUnifiedMediaGifHook(
         symbols: ResolvedSymbols,
         installer: FxHookInstaller,
         b: HardwareRenderBindings
     ) {
-        installer.install("hw:9108:C", b.loadMediaMethod) { chain ->
+        installer.install("hw:gif:loadMedia", b.loadMediaMethod) { chain ->
             if (!isHardwareGifEnabled()) {
                 return@install chain.proceed()
             }
@@ -740,32 +637,46 @@ object TouchImageHardwareHook {
                 return@install chain.proceed()
             }
 
-            val tokenField = b.loadTokenField ?: return@install chain.proceed()
-            val token = runCatching {
-                val next = tokenField.getInt(activity) + 1
-                tokenField.setInt(activity, next)
-                next
-            }.getOrNull() ?: return@install chain.proceed()
+            val token = nextGifLoadToken(activity, b) ?: return@install chain.proceed()
+            decodeAndDeliverGif(activity, display, holder, token, item, uri, symbols, b, installer, chain)
+        }
+    }
 
-            when (val outcome = decodeGifFromItem(activity, symbols, b, item, uri)) {
-                is GifDecodeResult.Cancelled -> return@install null
-                is GifDecodeResult.Fallback -> return@install chain.proceed()
-                is GifDecodeResult.Decoded -> {
-                    val posted = deliverDecodedGifOnUi(
-                        activity = activity,
-                        display = display,
-                        holder = holder,
-                        token = token,
-                        drawable = outcome.drawable,
-                        symbols = symbols,
-                        b = b,
-                        installer = installer
-                    )
-                    if (!posted) {
-                        return@install chain.proceed()
-                    }
-                    null
-                }
+    private fun nextGifLoadToken(activity: Activity, b: HardwareRenderBindings): Int? {
+        val tokenField = b.loadTokenField ?: return null
+        return runCatching {
+            val next = tokenField.getInt(activity) + 1
+            tokenField.setInt(activity, next)
+            next
+        }.getOrNull()
+    }
+
+    private fun decodeAndDeliverGif(
+        activity: Activity,
+        display: View,
+        holder: Any,
+        token: Int,
+        item: Any?,
+        uri: Uri?,
+        symbols: ResolvedSymbols,
+        b: HardwareRenderBindings,
+        installer: FxHookInstaller,
+        chain: XposedInterface.Chain
+    ): Any? {
+        return when (val outcome = decodeGifFromItem(activity, symbols, b, item, uri)) {
+            is GifDecodeResult.Cancelled -> null
+            is GifDecodeResult.Fallback -> chain.proceed()
+            is GifDecodeResult.Decoded -> {
+                val posted = deliverDecodedGifOnUi(
+                    activity = activity,
+                    display = display,
+                    holder = holder,
+                    token = token,
+                    drawable = outcome.drawable,
+                    b = b,
+                    installer = installer
+                )
+                if (!posted) chain.proceed() else null
             }
         }
     }
@@ -877,7 +788,6 @@ object TouchImageHardwareHook {
         holder: Any,
         token: Int,
         drawable: Drawable,
-        symbols: ResolvedSymbols,
         b: HardwareRenderBindings,
         installer: FxHookInstaller
     ): Boolean {
@@ -904,7 +814,7 @@ object TouchImageHardwareHook {
                 is BitmapDrawable -> {
                     val bmp = drawable.bitmap
                     if (bmp != null && !bmp.isRecycled) {
-                        deliverStaticGifBitmapOnUi(activity, display, holder, bmp, symbols, b)
+                        deliverStaticGifBitmapOnUi(activity, display, holder, bmp, b)
                     }
                 }
             }
@@ -991,14 +901,13 @@ object TouchImageHardwareHook {
         display: View,
         holder: Any,
         bitmap: Bitmap,
-        symbols: ResolvedSymbols,
         b: HardwareRenderBindings
     ) {
         clearAnimatedGifState(display)
         runCatching { b.isGifField?.setBoolean(activity, false) }
         runCatching { b.setPrescale?.invoke(display, 1.0f) }
 
-        if (symbols.profile == FxProfile.FX_9012 && b.deliverBitmapMethod != null) {
+        if (b.deliverBitmapMethod != null) {
             settleEnterTransitionIfPending(activity, display, b)
             val ok = runCatching {
                 b.deliverBitmapMethod.invoke(display, bitmap, false)
@@ -1006,10 +915,7 @@ object TouchImageHardwareHook {
             if (ok) return
         }
 
-        if (symbols.profile == FxProfile.FX_9108 &&
-            b.applyBitmapResultMethod != null &&
-            b.imageResultCtor != null
-        ) {
+        if (b.applyBitmapResultMethod != null && b.imageResultCtor != null) {
             val delivered = runCatching {
                 val resultObj = b.imageResultCtor.newInstance(bitmap, 1.0f, false)
                 b.applyBitmapResultMethod.invoke(activity, display, holder, resultObj, false)
@@ -1317,305 +1223,5 @@ object TouchImageHardwareHook {
         for (state in states) {
             state.stopAndDetach()
         }
-    }
-
-    private fun resolveBindings(symbols: ResolvedSymbols): HardwareRenderBindings {
-        val cl = symbols.classLoader
-        val touchClass = loadClass(cl, "nextapp.maui.ui.imageview.TouchImageDisplay")
-        val imageDisplayClass = symbols.sibling.imageDisplayClass
-            ?: loadClass(cl, "nextapp.fx.ui.viewer.image.ImageDisplay")
-        val viewerClass = symbols.sibling.imageViewerActivityClass
-            ?: loadClass(cl, "nextapp.fx.ui.viewer.image.ImageViewerActivity")
-
-        val setImageBitmap = declaredMethod(touchClass, "setImageBitmap", Bitmap::class.java)
-        val setImageMovie = declaredMethod(touchClass, "setImageMovie", Movie::class.java)
-        val setImageNull = declaredMethod(touchClass, "setImageNull")
-        val setPrescale = declaredMethod(touchClass, "setPrescale", Float::class.javaPrimitiveType)
-        val setTouchEnabled = declaredMethod(touchClass, "setTouchEnabled", Boolean::class.javaPrimitiveType)
-        val zoomFit = declaredMethod(touchClass, "zoomFit")
-        val onDraw = declaredMethod(touchClass, "onDraw", Canvas::class.java)
-        val onDetachedFromWindow = declaredMethod(touchClass, "onDetachedFromWindow")
-
-        return when (symbols.profile) {
-            FxProfile.FX_9012 -> {
-                val dimClass = loadClass(cl, "v8.f")
-                val holderClass = loadClass(cl, "nextapp.fx.ui.viewer.image.ImageViewerActivity\$j")
-                val transitionClass = loadClass(cl, "nextapp.fx.ui.viewer.image.f0")
-                val supportClass = loadClass(cl, "nextapp.fx.ui.activitysupport.j")
-                val gifProbeClass = loadClass(cl, "a9.e")
-                val localInterface = loadClass(cl, "ue.a0")
-                val localPathProvider = loadClass(cl, "ue.b0")
-
-                HardwareRenderBindings(
-                    touchClass = touchClass,
-                    setImageBitmap = setImageBitmap,
-                    setImageMovie = setImageMovie,
-                    setImageNull = setImageNull,
-                    setPrescale = setPrescale,
-                    setTouchEnabled = setTouchEnabled,
-                    zoomFit = zoomFit,
-                    onDraw = onDraw,
-                    onDetachedFromWindow = onDetachedFromWindow,
-                    updateBoundsMethod = declaredMethod(
-                        touchClass,
-                        "w",
-                        Int::class.javaPrimitiveType,
-                        Int::class.javaPrimitiveType,
-                        Boolean::class.javaPrimitiveType
-                    ),
-                    enforceLayerOnBitmapMethod = declaredMethod(touchClass, "g", Bitmap::class.java),
-                    bitmapField = declaredField(touchClass, "Q5"),
-                    movieField = declaredField(touchClass, "R5"),
-                    moviePlayingField = declaredField(touchClass, "S5"),
-                    movieThreadField = declaredField(touchClass, "f"),
-                    matrixField = declaredField(touchClass, "V5"),
-                    paintField = declaredField(touchClass, "H5"),
-                    cropArField = declaredField(touchClass, "f5"),
-                    cropRectField = declaredField(touchClass, "c5"),
-                    softwareLayerFlagField = declaredField(touchClass, "h5"),
-                    displaySizeField = declaredField(touchClass, "k5"),
-                    displaySizeWidthField = declaredField(dimClass, "f"),
-                    displaySizeHeightField = declaredField(dimClass, "i"),
-                    needsZoomFitField = declaredField(touchClass, "l5"),
-                    imageDisplayClass = imageDisplayClass,
-                    deliverBitmapMethod = declaredMethod(
-                        imageDisplayClass,
-                        "U",
-                        Bitmap::class.java,
-                        Boolean::class.javaPrimitiveType
-                    ),
-                    deliverMovieMethod = declaredMethod(imageDisplayClass, "V", Movie::class.java),
-                    clearDisplayMethod = declaredMethod(imageDisplayClass, "W"),
-                    displayBitmapField = declaredField(imageDisplayClass, "a6"),
-                    displayMovieField = declaredField(imageDisplayClass, "b6"),
-                    displayDisposedField = declaredField(imageDisplayClass, "f6"),
-                    displayFullLoadedField = declaredField(imageDisplayClass, "g6"),
-                    displayPreviewLoadedField = declaredField(imageDisplayClass, "h6"),
-                    viewerClass = viewerClass,
-                    loadMediaMethod = symbols.viewer.viewerLoadMedia ?: declaredMethod(
-                        viewerClass,
-                        "j1",
-                        imageDisplayClass,
-                        holderClass,
-                        Int::class.javaPrimitiveType
-                    ),
-                    loadGifMethod = symbols.viewer.viewerLoadGif ?: declaredMethod(
-                        viewerClass,
-                        "l1",
-                        imageDisplayClass,
-                        holderClass,
-                        Int::class.javaPrimitiveType
-                    ),
-                    applyBitmapResultMethod = null,
-                    imageResultCtor = null,
-                    loadTokenField = declaredField(viewerClass, "x5"),
-                    isGifField = declaredField(viewerClass, "P5"),
-                    currentHolderField = symbols.sibling.viewerCurrentHolderField
-                        ?: declaredField(viewerClass, "v5"),
-                    enterTransitionField = declaredField(viewerClass, "y5"),
-                    transitionBgViewField = declaredField(transitionClass, "c"),
-                    transitionTopBarField = declaredField(transitionClass, "d"),
-                    transitionBottomBarField = declaredField(transitionClass, "e"),
-                    transitionRunningField = declaredField(transitionClass, "h"),
-                    transitionDoneField = declaredField(transitionClass, "g"),
-                    uiHandlerField = declaredField(supportClass, "g5"),
-                    holderFileItemField = symbols.sibling.itemHolderFileItemField
-                        ?: declaredField(holderClass, "a"),
-                    holderUriField = symbols.sibling.itemHolderUriField
-                        ?: declaredField(holderClass, "b"),
-                    gifAnimatedCheckMethod = declaredMethod(gifProbeClass, "a", InputStream::class.java),
-                    localPathClass = localInterface,
-                    localPathMethod = declaredMethod(localPathProvider, "h")
-                )
-            }
-
-            FxProfile.FX_9108 -> {
-                val dimClass = loadClass(cl, "pa.c")
-                val holderClass = loadClass(cl, "nextapp.fx.ui.viewer.image.o")
-                val imageResultClass = loadClass(cl, "ua.a")
-                val transitionClass = loadClass(cl, "nextapp.fx.ui.viewer.image.u")
-                val supportClass = loadClass(cl, "af.h")
-                val gifProbeClass = loadClass(cl, "ua.b")
-                val localInterface = loadClass(cl, "kh.c0")
-                val localPathProvider = loadClass(cl, "kh.d0")
-
-                HardwareRenderBindings(
-                    touchClass = touchClass,
-                    setImageBitmap = setImageBitmap,
-                    setImageMovie = setImageMovie,
-                    setImageNull = setImageNull,
-                    setPrescale = setPrescale,
-                    setTouchEnabled = setTouchEnabled,
-                    zoomFit = zoomFit,
-                    onDraw = onDraw,
-                    onDetachedFromWindow = onDetachedFromWindow,
-                    updateBoundsMethod = declaredMethod(
-                        touchClass,
-                        "h",
-                        Int::class.javaPrimitiveType,
-                        Int::class.javaPrimitiveType,
-                        Boolean::class.javaPrimitiveType
-                    ),
-                    enforceLayerOnBitmapMethod = null,
-                    bitmapField = declaredField(touchClass, "N2"),
-                    movieField = declaredField(touchClass, "O2"),
-                    moviePlayingField = declaredField(touchClass, "P2"),
-                    movieThreadField = declaredField(touchClass, "f"),
-                    matrixField = declaredField(touchClass, "S2"),
-                    paintField = declaredField(touchClass, "E2"),
-                    cropArField = declaredField(touchClass, "c2"),
-                    cropRectField = declaredField(touchClass, "Z1"),
-                    softwareLayerFlagField = declaredField(touchClass, "e2"),
-                    displaySizeField = declaredField(touchClass, "h2"),
-                    displaySizeWidthField = declaredField(dimClass, "f"),
-                    displaySizeHeightField = declaredField(dimClass, "i"),
-                    needsZoomFitField = declaredField(touchClass, "i2"),
-                    imageDisplayClass = imageDisplayClass,
-                    deliverBitmapMethod = null,
-                    deliverMovieMethod = null,
-                    clearDisplayMethod = declaredMethod(imageDisplayClass, "l"),
-                    displayBitmapField = declaredField(imageDisplayClass, "W2"),
-                    displayMovieField = declaredField(imageDisplayClass, "X2"),
-                    displayDisposedField = declaredField(imageDisplayClass, "b3"),
-                    displayFullLoadedField = declaredField(imageDisplayClass, "c3"),
-                    displayPreviewLoadedField = declaredField(imageDisplayClass, "d3"),
-                    viewerClass = viewerClass,
-                    loadMediaMethod = symbols.viewer.viewerLoadMediaAndBitmap ?: declaredMethod(
-                        viewerClass,
-                        "C",
-                        imageDisplayClass,
-                        holderClass,
-                        Int::class.javaPrimitiveType
-                    ),
-                    loadGifMethod = null,
-                    applyBitmapResultMethod = declaredMethod(
-                        viewerClass,
-                        "F",
-                        imageDisplayClass,
-                        holderClass,
-                        imageResultClass,
-                        Boolean::class.javaPrimitiveType
-                    ),
-                    imageResultCtor = declaredConstructor(
-                        imageResultClass,
-                        Bitmap::class.java,
-                        Float::class.javaPrimitiveType,
-                        Boolean::class.javaPrimitiveType
-                    ),
-                    loadTokenField = declaredField(viewerClass, "t2"),
-                    isGifField = declaredField(viewerClass, "L2"),
-                    currentHolderField = symbols.sibling.viewerCurrentHolderField
-                        ?: declaredField(viewerClass, "r2"),
-                    enterTransitionField = declaredField(viewerClass, "u2"),
-                    transitionBgViewField = declaredField(transitionClass, "c"),
-                    transitionTopBarField = declaredField(transitionClass, "d"),
-                    transitionBottomBarField = declaredField(transitionClass, "e"),
-                    transitionRunningField = declaredField(transitionClass, "h"),
-                    transitionDoneField = declaredField(transitionClass, "g"),
-                    uiHandlerField = declaredField(supportClass, "c2"),
-                    holderFileItemField = symbols.sibling.itemHolderFileItemField
-                        ?: declaredField(holderClass, "a"),
-                    holderUriField = symbols.sibling.itemHolderUriField
-                        ?: declaredField(holderClass, "b"),
-                    gifAnimatedCheckMethod = declaredMethod(gifProbeClass, "f", InputStream::class.java),
-                    localPathClass = localInterface,
-                    localPathMethod = declaredMethod(localPathProvider, "d")
-                )
-            }
-
-            FxProfile.STRUCTURAL_FALLBACK -> {
-                val bitmapFields = touchClass?.declaredFields?.filter { it.type == Bitmap::class.java }.orEmpty()
-                val matrixFields = touchClass?.declaredFields?.filter { it.type == Matrix::class.java }.orEmpty()
-                val rectFields = touchClass?.declaredFields?.filter { it.type == Rect::class.java }.orEmpty()
-                val bitmapField = bitmapFields.singleOrNull()?.apply { isAccessible = true }
-                val matrixField = matrixFields.singleOrNull()?.apply { isAccessible = true }
-                val rectField = rectFields.singleOrNull()?.apply { isAccessible = true }
-
-                HardwareRenderBindings(
-                    touchClass = touchClass,
-                    setImageBitmap = setImageBitmap,
-                    setImageMovie = setImageMovie,
-                    setImageNull = setImageNull,
-                    setPrescale = setPrescale,
-                    setTouchEnabled = setTouchEnabled,
-                    zoomFit = zoomFit,
-                    onDraw = onDraw,
-                    onDetachedFromWindow = onDetachedFromWindow,
-                    updateBoundsMethod = null,
-                    enforceLayerOnBitmapMethod = null,
-                    bitmapField = bitmapField,
-                    movieField = null,
-                    moviePlayingField = null,
-                    movieThreadField = null,
-                    matrixField = matrixField,
-                    paintField = null,
-                    cropArField = null,
-                    cropRectField = rectField,
-                    softwareLayerFlagField = null,
-                    displaySizeField = null,
-                    displaySizeWidthField = null,
-                    displaySizeHeightField = null,
-                    needsZoomFitField = null,
-                    imageDisplayClass = imageDisplayClass,
-                    deliverBitmapMethod = null,
-                    deliverMovieMethod = null,
-                    clearDisplayMethod = null,
-                    displayBitmapField = null,
-                    displayMovieField = null,
-                    displayDisposedField = null,
-                    displayFullLoadedField = null,
-                    displayPreviewLoadedField = null,
-                    viewerClass = viewerClass,
-                    loadMediaMethod = null,
-                    loadGifMethod = null,
-                    applyBitmapResultMethod = null,
-                    imageResultCtor = null,
-                    loadTokenField = null,
-                    isGifField = null,
-                    currentHolderField = null,
-                    enterTransitionField = null,
-                    transitionBgViewField = null,
-                    transitionTopBarField = null,
-                    transitionBottomBarField = null,
-                    transitionRunningField = null,
-                    transitionDoneField = null,
-                    uiHandlerField = null,
-                    holderFileItemField = null,
-                    holderUriField = null,
-                    gifAnimatedCheckMethod = null,
-                    localPathClass = null,
-                    localPathMethod = null
-                )
-            }
-        }
-    }
-
-    private fun loadClass(cl: ClassLoader, name: String): Class<*>? {
-        return runCatching { Class.forName(name, false, cl) }.getOrNull()
-    }
-
-    private fun declaredMethod(clazz: Class<*>?, name: String, vararg params: Class<*>?): Method? {
-        if (clazz == null || params.any { it == null }) return null
-        @Suppress("UNCHECKED_CAST")
-        val nonNullParams = params as Array<Class<*>>
-        return runCatching {
-            clazz.getDeclaredMethod(name, *nonNullParams).apply { isAccessible = true }
-        }.getOrNull()
-    }
-
-    private fun declaredConstructor(clazz: Class<*>?, vararg params: Class<*>?): Constructor<*>? {
-        if (clazz == null || params.any { it == null }) return null
-        @Suppress("UNCHECKED_CAST")
-        val nonNullParams = params as Array<Class<*>>
-        return runCatching {
-            clazz.getDeclaredConstructor(*nonNullParams).apply { isAccessible = true }
-        }.getOrNull()
-    }
-
-    private fun declaredField(clazz: Class<*>?, name: String): Field? {
-        if (clazz == null) return null
-        return runCatching {
-            clazz.getDeclaredField(name).apply { isAccessible = true }
-        }.getOrNull()
     }
 }

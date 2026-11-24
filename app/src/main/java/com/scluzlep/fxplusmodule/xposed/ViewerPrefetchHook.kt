@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.media.ExifInterface
 import android.view.View
+import android.widget.ProgressBar
 import com.scluzlep.fxplusmodule.cache.PrefetchCacheManager
 import com.scluzlep.fxplusmodule.cache.PrefetchItem
 import io.github.libxposed.api.XposedInterface
@@ -131,18 +132,29 @@ object ViewerPrefetchHook {
             }
         }
 
-        when (symbols.profile) {
-            FxProfile.FX_9012 -> install9012Hooks(symbols, installer)
-            FxProfile.FX_9108 -> install9108Hooks(symbols, installer)
-            FxProfile.STRUCTURAL_FALLBACK -> Unit
+        val hasClassic = v.viewerOpenItemStream != null ||
+            v.viewerLoadMedia != null ||
+            s.siblingCallbackLoadedMethod != null
+        val hasModern = v.viewerStreamProviderRead != null ||
+            v.viewerLoadMediaAndBitmap != null ||
+            s.displayCommitMethod != null
+
+        if (hasClassic) {
+            installClassicViewerHooks(symbols, installer)
+        }
+        if (hasModern) {
+            installModernViewerHooks(symbols, installer)
+        }
+        if (hasClassic || hasModern) {
+            installSharedViewerHooks(symbols, installer)
         }
     }
 
-    private fun install9012Hooks(symbols: ResolvedSymbols, installer: FxHookInstaller) {
+    private fun installClassicViewerHooks(symbols: ResolvedSymbols, installer: FxHookInstaller) {
         val s = symbols.sibling
         val v = symbols.viewer
 
-        installer.install("viewer:9012:V1", v.viewerOpenItemStream) { chain ->
+        installer.install("viewer:classic:openItemStream", v.viewerOpenItemStream) { chain ->
             val item = chain.getArg(0)
             val cached = lookupCachedFile(symbols, item)
             if (cached != null && cached.exists() && cached.length() > 0L) {
@@ -167,23 +179,12 @@ object ViewerPrefetchHook {
                 chain.proceed()
             }
         }
-        installer.install("viewer:9012:j1", v.viewerLoadMedia, scopedViewerLoader)
-        installer.install("viewer:9012:l1", v.viewerLoadGif, scopedViewerLoader)
-
-        installer.install("viewer:9012:d2", v.viewerDecodeItem) { chain ->
-            val ctx = chain.getArg(0) as? Context ?: return@install chain.proceed()
-            val item = chain.getArg(1) ?: return@install chain.proceed()
-            val rotDeg = (chain.getArg(2) as? Int) ?: 0
-            if (rotDeg == 0) {
-                val recovered = recoverJpegExifRotation(symbols, ctx, item)
-                if (recovered != 0) {
-                    return@install chain.proceed(arrayOf(ctx, item, recovered))
-                }
-            }
-            chain.proceed()
+        installer.install("viewer:classic:loadMedia", v.viewerLoadMedia, scopedViewerLoader)
+        if (v.viewerLoadGif != v.viewerLoadMedia) {
+            installer.install("viewer:classic:loadGif", v.viewerLoadGif, scopedViewerLoader)
         }
 
-        installer.install("viewer:9012:siblingsLoaded", s.siblingCallbackLoadedMethod) { chain ->
+        installer.install("viewer:classic:siblingsLoaded", s.siblingCallbackLoadedMethod) { chain ->
             val result = chain.proceed()
             val cb = chain.thisObject
             val activity = cb?.let { runCatching { s.siblingCallbackActivityField?.get(it) as? Activity }.getOrNull() }
@@ -195,34 +196,25 @@ object ViewerPrefetchHook {
             result
         }
 
-        installer.install("viewer:9012:swipeRequest", s.displayListenerRequestMethod) { chain ->
-            val result = chain.proceed()
-            val listener = chain.thisObject
-            val activity = listener?.let { runCatching { s.displayListenerHolderField?.get(it) as? Activity }.getOrNull() }
-            val newIndex = (chain.getArg(1) as? Int) ?: -1
-            if (activity != null && newIndex >= 0) {
-                onSwipeToIndex(activity, newIndex, commit = false)
+        if (s.displayListenerCommitMethod?.parameterTypes?.size == 2) {
+            installer.install("viewer:classic:swipeCommit", s.displayListenerCommitMethod) { chain ->
+                val result = chain.proceed()
+                val listener = chain.thisObject
+                val activity = listener?.let { runCatching { s.displayListenerHolderField?.get(it) as? Activity }.getOrNull() }
+                val newIndex = (chain.getArg(1) as? Int) ?: -1
+                if (activity != null && newIndex >= 0) {
+                    onSwipeToIndex(activity, newIndex, commit = true)
+                }
+                result
             }
-            result
-        }
-
-        installer.install("viewer:9012:swipeCommit", s.displayListenerCommitMethod) { chain ->
-            val result = chain.proceed()
-            val listener = chain.thisObject
-            val activity = listener?.let { runCatching { s.displayListenerHolderField?.get(it) as? Activity }.getOrNull() }
-            val newIndex = (chain.getArg(1) as? Int) ?: -1
-            if (activity != null && newIndex >= 0) {
-                onSwipeToIndex(activity, newIndex, commit = true)
-            }
-            result
         }
     }
 
-    private fun install9108Hooks(symbols: ResolvedSymbols, installer: FxHookInstaller) {
+    private fun installModernViewerHooks(symbols: ResolvedSymbols, installer: FxHookInstaller) {
         val s = symbols.sibling
         val v = symbols.viewer
 
-        installer.install("viewer:9108:c.read", v.viewerStreamProviderRead) { chain ->
+        installer.install("viewer:modern:streamProviderRead", v.viewerStreamProviderRead) { chain ->
             val provider = chain.thisObject
             val item = provider?.let { runCatching { v.viewerStreamProviderItemField?.get(it) }.getOrNull() }
             val cached = lookupCachedFile(symbols, item)
@@ -232,7 +224,7 @@ object ViewerPrefetchHook {
             chain.proceed()
         }
 
-        installer.install("viewer:9108:C", v.viewerLoadMediaAndBitmap) { chain ->
+        installer.install("viewer:modern:loadMediaAndBitmap", v.viewerLoadMediaAndBitmap) { chain ->
             val holder = chain.getArg(1)
             val item = holder?.let { runCatching { s.itemHolderFileItemField?.get(it) }.getOrNull() }
             val cached = lookupCachedFile(symbols, item)
@@ -249,32 +241,7 @@ object ViewerPrefetchHook {
             }
         }
 
-        installer.install("viewer:9108:I", v.viewerDecodeItem) { chain ->
-            val activity = chain.getArg(0) as? Context ?: return@install chain.proceed()
-            val item = chain.getArg(1) ?: return@install chain.proceed()
-            val rotDeg = (chain.getArg(2) as? Int) ?: 0
-            if (rotDeg == 0) {
-                val recovered = recoverJpegExifRotation(symbols, activity, item)
-                if (recovered != 0) {
-                    return@install chain.proceed(arrayOf(activity, item, recovered))
-                }
-            }
-            chain.proceed()
-        }
-
-        installer.install("viewer:9108:l.e", s.displayListenerRequestMethod) { chain ->
-            val result = chain.proceed()
-            val listener = chain.thisObject
-            val holder = listener?.let { runCatching { s.displayListenerHolderField?.get(it) }.getOrNull() }
-            val activity = holder as? Activity
-            val newIndex = (chain.getArg(1) as? Int) ?: -1
-            if (activity != null && s.imageViewerActivityClass?.isInstance(activity) == true && newIndex >= 0) {
-                onSwipeToIndex(activity, newIndex, commit = false)
-            }
-            result
-        }
-
-        installer.install("viewer:9108:ImageDisplay.k", s.displayCommitMethod) { chain ->
+        installer.install("viewer:modern:displayCommit", s.displayCommitMethod) { chain ->
             val result = chain.proceed()
             val display = chain.thisObject
             if (display != null) {
@@ -288,6 +255,38 @@ object ViewerPrefetchHook {
                         onSwipeToIndex(activity, newIndex, commit = true)
                     }
                 }
+            }
+            result
+        }
+    }
+
+    private fun installSharedViewerHooks(symbols: ResolvedSymbols, installer: FxHookInstaller) {
+        val s = symbols.sibling
+        val v = symbols.viewer
+
+        installer.install("viewer:decodeItem", v.viewerDecodeItem) { chain ->
+            val ctx = chain.getArg(0) as? Context ?: return@install chain.proceed()
+            val item = chain.getArg(1) ?: return@install chain.proceed()
+            val rotDeg = (chain.getArg(2) as? Int) ?: 0
+            if (rotDeg == 0) {
+                val recovered = recoverJpegExifRotation(symbols, ctx, item)
+                if (recovered != 0) {
+                    return@install chain.proceed(arrayOf(ctx, item, recovered))
+                }
+            }
+            chain.proceed()
+        }
+
+        installer.install("viewer:swipeRequest", s.displayListenerRequestMethod) { chain ->
+            val result = chain.proceed()
+            val listener = chain.thisObject
+            val activity = listener?.let { runCatching { s.displayListenerHolderField?.get(it) as? Activity }.getOrNull() }
+            val newIndex = (chain.getArg(1) as? Int) ?: -1
+            if (activity != null &&
+                (s.imageViewerActivityClass == null || s.imageViewerActivityClass.isInstance(activity)) &&
+                newIndex >= 0
+            ) {
+                onSwipeToIndex(activity, newIndex, commit = false)
             }
             result
         }
@@ -368,26 +367,8 @@ object ViewerPrefetchHook {
     }
 
     private fun installTaskThreadFactory(symbols: ResolvedSymbols, installer: FxHookInstaller) {
-        val taskThreadClassName = when (symbols.profile) {
-            FxProfile.FX_9012 -> "i9.e"
-            FxProfile.FX_9108 -> "bb.d"
-            FxProfile.STRUCTURAL_FALLBACK -> null
-        }
-        if (taskThreadClassName == null) {
-            PrefetchCacheManager.customThreadFactory = null
-            return
-        }
-        val ctor = runCatching {
-            val clazz = Class.forName(taskThreadClassName, false, symbols.classLoader)
-            clazz.getDeclaredConstructor(
-                Class::class.java,
-                String::class.java,
-                Runnable::class.java
-            ).apply { isAccessible = true }
-        }.onFailure { err ->
-            installer.logWarn("Failed to resolve FX TaskThread $taskThreadClassName", err)
-        }.getOrNull()
-        if (ctor == null) {
+        val ctor = symbols.viewer.taskThreadCtor
+        if (ctor == null || ctor.parameterTypes.size != 3) {
             PrefetchCacheManager.customThreadFactory = null
             return
         }
@@ -397,7 +378,7 @@ object ViewerPrefetchHook {
             val thread = runCatching {
                 ctor.newInstance(FxPlusModule::class.java, name, runnable) as? Thread
             }.onFailure { err ->
-                installer.logWarn("Failed to instantiate FX TaskThread $taskThreadClassName", err)
+                installer.logWarn("Failed to instantiate FX TaskThread ${ctor.declaringClass.name}", err)
             }.getOrNull() ?: Thread(runnable, name)
             thread.apply {
                 isDaemon = true
@@ -407,14 +388,15 @@ object ViewerPrefetchHook {
     }
 
     private fun resolveProgressBarField(symbols: ResolvedSymbols): Field? {
-        val fieldName = when (symbols.profile) {
-            FxProfile.FX_9012 -> "R5"
-            FxProfile.FX_9108 -> "N2"
-            FxProfile.STRUCTURAL_FALLBACK -> return null
+        symbols.viewer.viewerProgressBarField?.let { field ->
+            field.isAccessible = true
+            return field
         }
         val viewerClass = symbols.sibling.imageViewerActivityClass ?: return null
         return runCatching {
-            viewerClass.getDeclaredField(fieldName).apply { isAccessible = true }
+            viewerClass.declaredFields
+                .singleOrNull { it.type == ProgressBar::class.java }
+                ?.apply { isAccessible = true }
         }.getOrNull()
     }
 

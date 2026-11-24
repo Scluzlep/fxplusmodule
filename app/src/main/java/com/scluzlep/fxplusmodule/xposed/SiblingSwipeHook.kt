@@ -16,17 +16,18 @@ object SiblingSwipeHook {
 
     fun install(symbols: ResolvedSymbols, installer: FxHookInstaller) {
         val s = symbols.sibling
-        when (symbols.profile) {
-            FxProfile.FX_9012 -> {
-                installer.install("sibling:9012:k0.b", s.enumerateSiblings) { chain ->
+        val enumerate = s.enumerateSiblings
+        when (enumerate?.parameterTypes?.size) {
+            6 -> {
+                installer.install("sibling:enumerate:6arg", enumerate) { chain ->
                     if (!FxConfigBridge.current.unlockLargeImageSwipe) {
                         return@install chain.proceed()
                     }
                     handle9012Enumerate(symbols, installer, chain)
                 }
             }
-            FxProfile.FX_9108 -> {
-                installer.install("sibling:9108:b0.run", s.enumerateSiblings) { chain ->
+            0 -> {
+                installer.install("sibling:enumerate:0arg", enumerate) { chain ->
                     if (!FxConfigBridge.current.unlockLargeImageSwipe) {
                         val res = chain.proceed()
                         notify9108AfterVanilla(symbols, chain.thisObject)
@@ -35,8 +36,8 @@ object SiblingSwipeHook {
                     handle9108Enumerate(symbols, installer, chain)
                 }
             }
-            FxProfile.STRUCTURAL_FALLBACK -> {
-                installer.logWarn("SiblingSwipeHook skipped in structural fallback mode")
+            else -> {
+                installer.logWarn("SiblingSwipeHook skipped: unsupported enumerateSiblings signature")
             }
         }
     }
@@ -98,7 +99,10 @@ object SiblingSwipeHook {
             }
 
             if (index == -1) {
-                val failMethod = s.siblingCallbackClass?.getDeclaredMethod("b")?.apply { isAccessible = true }
+                val failMethod = s.siblingCallbackFailMethod
+                    ?: runCatching {
+                        s.siblingCallbackClass?.getDeclaredMethod("b")?.apply { isAccessible = true }
+                    }.getOrNull()
                 failMethod?.invoke(callback)
                 return null
             }

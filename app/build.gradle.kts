@@ -10,8 +10,14 @@ android {
         applicationId = "com.scluzlep.fxplusmodule"
         minSdk = 28
         targetSdk = 36
-        versionCode = System.getenv("FXPLUS_VERSION_CODE")?.toIntOrNull() ?: 1003001
-        versionName = System.getenv("FXPLUS_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.3"
+        versionCode = System.getenv("FXPLUS_VERSION_CODE")?.toIntOrNull() ?: 1004001
+        versionName = System.getenv("FXPLUS_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.4"
+    }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
     }
 
     buildTypes {
@@ -49,6 +55,7 @@ dependencies {
     compileOnly("io.github.libxposed:api:102.0.0")
     implementation("dev.rikka.shizuku:api:13.1.5")
     implementation("dev.rikka.shizuku:provider:13.1.5")
+    implementation("org.luckypray:dexkit:2.3.0")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")

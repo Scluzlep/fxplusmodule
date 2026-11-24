@@ -38,40 +38,39 @@ object RemoteThumbnailHook {
             handleWorkerCacheReuse(symbols, installer, chain)
         }
 
-        when (symbols.profile) {
-            FxProfile.FX_9012 -> {
-                installer.install("thumb:9012:exceedsPixelCap", rt.thumbGeneratorExceedsCap) { chain ->
-                    if (!FxConfigBridge.current.highResThumbnails) {
-                        return@install chain.proceed()
-                    }
-                    val dim = chain.getArg(0) ?: return@install chain.proceed()
-                    val w = runCatching { dim.javaClass.getField("f").getInt(dim) }.getOrNull()
-                        ?: return@install chain.proceed()
-                    val h = runCatching { dim.javaClass.getField("i").getInt(dim) }.getOrNull()
-                        ?: return@install chain.proceed()
-                    w.toLong() * h.toLong() < HIGH_RES_PIXEL_CAP.toLong()
+        if (rt.thumbGeneratorExceedsCap != null) {
+            installer.install("thumb:exceedsPixelCap", rt.thumbGeneratorExceedsCap) { chain ->
+                if (!FxConfigBridge.current.highResThumbnails) {
+                    return@install chain.proceed()
                 }
-                installer.install("thumb:9012:generateFromStream", rt.thumbGeneratorGenerate) { chain ->
-                    if (!FxConfigBridge.current.highResThumbnails) {
-                        return@install chain.proceed()
-                    }
-                    val streamSource = chain.getArg(0) ?: return@install chain.proceed()
-                    val outFile = chain.getArg(1) as? File ?: return@install chain.proceed()
-                    val srcPath = chain.getArg(2) as? String
-                    generateHighResThumb9012(symbols, streamSource, outFile, srcPath)
-                        ?: chain.proceed()
-                }
+                val dim = chain.getArg(0) ?: return@install chain.proceed()
+                val w = rt.dimWidthField?.let { runCatching { it.getInt(dim) }.getOrNull() }
+                    ?: return@install chain.proceed()
+                val h = rt.dimHeightField?.let { runCatching { it.getInt(dim) }.getOrNull() }
+                    ?: return@install chain.proceed()
+                w.toLong() * h.toLong() < HIGH_RES_PIXEL_CAP.toLong()
             }
-            FxProfile.FX_9108 -> {
-                installer.install("thumb:9108:generate", rt.thumbGeneratorRun) { chain ->
-                    if (!FxConfigBridge.current.highResThumbnails) {
-                        return@install chain.proceed()
-                    }
-                    val gen = chain.thisObject ?: return@install chain.proceed()
-                    handleHighRes9108(symbols, gen) ?: chain.proceed()
+        }
+
+        if (rt.thumbGeneratorGenerate?.parameterTypes?.size == 3) {
+            installer.install("thumb:generateFromStream", rt.thumbGeneratorGenerate) { chain ->
+                if (!FxConfigBridge.current.highResThumbnails) {
+                    return@install chain.proceed()
                 }
+                val streamSource = chain.getArg(0) ?: return@install chain.proceed()
+                val outFile = chain.getArg(1) as? File ?: return@install chain.proceed()
+                val srcPath = chain.getArg(2) as? String
+                generateHighResThumbFromStream(symbols, streamSource, outFile, srcPath)
+                    ?: chain.proceed()
             }
-            FxProfile.STRUCTURAL_FALLBACK -> Unit
+        } else if (rt.thumbGeneratorRun?.parameterTypes?.isEmpty() == true) {
+            installer.install("thumb:generate", rt.thumbGeneratorRun) { chain ->
+                if (!FxConfigBridge.current.highResThumbnails) {
+                    return@install chain.proceed()
+                }
+                val gen = chain.thisObject ?: return@install chain.proceed()
+                handleHighResGenerator(symbols, gen) ?: chain.proceed()
+            }
         }
     }
 
@@ -98,13 +97,23 @@ object RemoteThumbnailHook {
 
         val config = FxConfigBridge.current
         val callbackClass = rt.thumbCallbackClass ?: return chain.proceed()
+        val enqueueMethod = rt.thumbCallbackEnqueueMethod
+            ?: callbackClass.declaredMethods.singleOrNull { it.parameterTypes.size == 1 }
         var vanillaEnqueued = false
 
         val proxyCallback = Proxy.newProxyInstance(
             symbols.classLoader,
             arrayOf(callbackClass)
         ) { _, method, args ->
-            if (method.name == "a" && args != null && args.size == 1) {
+            val isEnqueue = if (enqueueMethod != null) {
+                method.name == enqueueMethod.name &&
+                    args != null &&
+                    args.size == enqueueMethod.parameterTypes.size &&
+                    method.parameterTypes.contentEquals(enqueueMethod.parameterTypes)
+            } else {
+                false
+            }
+            if (isEnqueue) {
                 if (!config.enableRemoteThumbnails) {
                     return@newProxyInstance null
                 }
@@ -137,9 +146,6 @@ object RemoteThumbnailHook {
 
             if (shouldUnlock) {
                 val ctor = rt.remoteThumbTaskCtor
-                val enqueueMethod = callbackClass.declaredMethods.firstOrNull {
-                    it.name == "a" && it.parameterTypes.size == 1
-                }
                 if (ctor != null && enqueueMethod != null) {
                     runCatching {
                         val task = ctor.newInstance(ctx, item, size, cache, prefKey)
@@ -180,9 +186,10 @@ object RemoteThumbnailHook {
         val rt = symbols.remoteThumb
         val worker = chain.thisObject ?: return chain.proceed()
 
-        if (symbols.profile == FxProfile.FX_9108) {
-            val caseId = runCatching { rt.remoteThumbWorkerCaseField?.getInt(worker) }.getOrNull() ?: return chain.proceed()
-            if (caseId != 2) return chain.proceed()
+        if (rt.remoteThumbWorkerCaseField != null) {
+            val caseId = runCatching { rt.remoteThumbWorkerCaseField.getInt(worker) }.getOrNull()
+                ?: return chain.proceed()
+            if (caseId != rt.remoteThumbWorkerCaseId) return chain.proceed()
         }
 
         val task = runCatching { rt.remoteThumbWorkerOwnerField?.get(worker) }.getOrNull() ?: return chain.proceed()
@@ -239,7 +246,7 @@ object RemoteThumbnailHook {
         }.getOrDefault(true)
     }
 
-    private fun generateHighResThumb9012(
+    private fun generateHighResThumbFromStream(
         symbols: ResolvedSymbols,
         streamSource: Any,
         outFile: File,
@@ -252,11 +259,11 @@ object RemoteThumbnailHook {
             openStream = { runCatching { readMethod.invoke(streamSource) as? InputStream }.getOrNull() },
             outFile = outFile,
             srcPath = srcPath,
-            buildInfo = { path, w, h, mime -> infoCtor.newInstance(path, w, h, mime) }
+            buildInfo = { path, w, h, mime -> buildThumbImageInfo(infoCtor, path, w, h, mime) }
         )
     }
 
-    private fun handleHighRes9108(symbols: ResolvedSymbols, gen: Any): Any? {
+    private fun handleHighResGenerator(symbols: ResolvedSymbols, gen: Any): Any? {
         val rt = symbols.remoteThumb
         val outFile = runCatching { rt.thumbGeneratorOutFileField?.get(gen) as? File }.getOrNull() ?: return null
         if (outFile.exists() && outFile.length() > 0L) return null
@@ -271,8 +278,23 @@ object RemoteThumbnailHook {
             openStream = { runCatching { readMethod.invoke(streamSource) as? InputStream }.getOrNull() },
             outFile = outFile,
             srcPath = srcPath,
-            buildInfo = { path, w, h, mime -> infoCtor.newInstance(w, h, path, mime) }
+            buildInfo = { path, w, h, mime -> buildThumbImageInfo(infoCtor, path, w, h, mime) }
         )
+    }
+
+    private fun buildThumbImageInfo(
+        infoCtor: java.lang.reflect.Constructor<*>,
+        path: String,
+        w: Int,
+        h: Int,
+        mime: String
+    ): Any {
+        val params = infoCtor.parameterTypes
+        return if (params.size == 4 && params[0] == String::class.java) {
+            infoCtor.newInstance(path, w, h, mime)
+        } else {
+            infoCtor.newInstance(w, h, path, mime)
+        }
     }
 
     private inline fun generateHighResThumbCommon(

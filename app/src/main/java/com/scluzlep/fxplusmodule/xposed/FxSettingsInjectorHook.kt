@@ -62,7 +62,6 @@ object FxSettingsInjectorHook {
     private const val DIALOG_TITLE = "FxPlusModule"
     private const val DIALOG_DESCRIPTION = "配置立即生效"
     private const val HOME_MENU_ENTRY_TITLE = "FxPlusModule"
-    private const val HOME_MENU_CASE_9108 = 14
 
     private data class StorageBackendStatus(
         val bridgeReachable: Boolean,
@@ -115,9 +114,9 @@ object FxSettingsInjectorHook {
         installer.install("settings:HomeMenu.populate", hm.menuContribPopulateMethod) { chain ->
             val result = chain.proceed()
             val contrib = chain.thisObject ?: return@install result
-            if (symbols.profile == FxProfile.FX_9108) {
-                val caseId = runCatching { hm.menuContribCaseField?.getInt(contrib) }.getOrNull()
-                if (caseId != HOME_MENU_CASE_9108) return@install result
+            if (hm.menuContribCaseField != null) {
+                val caseId = runCatching { hm.menuContribCaseField.getInt(contrib) }.getOrNull()
+                if (caseId != hm.menuContribCaseId) return@install result
             }
             val homeView = runCatching { hm.menuContribOwnerField?.get(contrib) }.getOrNull()
                 ?: return@install result
@@ -158,14 +157,15 @@ object FxSettingsInjectorHook {
             }
 
             val icon: Drawable? = runCatching {
-                when (symbols.profile) {
-                    FxProfile.FX_9012 -> hm.actionIconsCreateMethod?.invoke(
+                val iconMethod = hm.actionIconsCreateMethod ?: return@runCatching null
+                when (iconMethod.parameterTypes.getOrNull(2)) {
+                    Boolean::class.javaPrimitiveType -> iconMethod.invoke(
                         null, res, "action_settings", isBgLight
                     ) as? Drawable
-                    FxProfile.FX_9108 -> hm.actionIconsCreateMethod?.invoke(
+                    Int::class.javaPrimitiveType -> iconMethod.invoke(
                         null, res, "action_settings", if (isBgLight) 1 else 0
                     ) as? Drawable
-                    FxProfile.STRUCTURAL_FALLBACK -> null
+                    else -> null
                 }
             }.getOrNull()
 
@@ -438,6 +438,17 @@ object FxSettingsInjectorHook {
         }
     }
 
+    internal fun buildDialogDescription(symbols: ResolvedSymbols): String {
+        val modeLabel = when {
+            symbols.profile == FxProfile.FX_9012 || symbols.profile == FxProfile.FX_9108 -> "内置规则"
+            symbols.profile == FxProfile.DEXKIT_DYNAMIC &&
+                symbols.symbolResolutionSource.contains("cache", ignoreCase = true) -> "DexKit 缓存"
+            symbols.profile == FxProfile.DEXKIT_DYNAMIC -> "DexKit 适配"
+            else -> "兼容模式"
+        }
+        return "$DIALOG_DESCRIPTION · $modeLabel"
+    }
+
     fun showNativeSettingsDialog(
         symbols: ResolvedSymbols,
         installer: FxHookInstaller,
@@ -464,10 +475,11 @@ object FxSettingsInjectorHook {
 
         runCatching {
             st.fxDialogSetHeader?.invoke(dialogObj, DIALOG_TITLE)
-            st.fxDialogSetDescription?.invoke(dialogObj, DIALOG_DESCRIPTION)
+            st.fxDialogSetDescription?.invoke(dialogObj, buildDialogDescription(symbols))
             val palette = resolveLivePalette(symbols, activity, dialogObj)
             val rootLayout = getLayout.invoke(dialogObj) as LinearLayout
             populateDialogContent(
+                symbols = symbols,
                 activity = activity,
                 container = rootLayout,
                 palette = palette,
@@ -488,12 +500,22 @@ object FxSettingsInjectorHook {
     private fun showFallbackAlertDialog(symbols: ResolvedSymbols, activity: Activity) {
         val palette = resolveLivePalette(symbols, activity, dialogObj = null)
         val scroll = ScrollView(activity)
-        val container = LinearLayout(activity).apply {
+        val wrapper = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             val pad = dp(activity, 16)
             setPadding(pad, pad / 2, pad, pad)
         }
-        scroll.addView(container)
+        wrapper.addView(TextView(activity).apply {
+            text = buildDialogDescription(symbols)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
+            setTextColor(palette.textSecondary)
+            setPadding(0, 0, 0, dp(activity, 8))
+        })
+        val container = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        wrapper.addView(container)
+        scroll.addView(wrapper)
         val themeRes = if (palette.isLight) {
             android.R.style.Theme_DeviceDefault_Light_Dialog_Alert
         } else {
@@ -505,6 +527,7 @@ object FxSettingsInjectorHook {
             .setPositiveButton("关闭", null)
             .create()
         populateDialogContent(
+            symbols = symbols,
             activity = activity,
             container = container,
             palette = palette,
@@ -520,6 +543,7 @@ object FxSettingsInjectorHook {
     }
 
     private fun populateDialogContent(
+        symbols: ResolvedSymbols,
         activity: Activity,
         container: LinearLayout,
         palette: FxDialogPalette,
@@ -806,6 +830,7 @@ object FxSettingsInjectorHook {
 
             addDivider(activity, container, palette)
             addCacheFooter(
+                symbols = symbols,
                 activity = activity,
                 container = container,
                 palette = palette,
@@ -1274,6 +1299,7 @@ object FxSettingsInjectorHook {
     }
 
     private fun addCacheFooter(
+        symbols: ResolvedSymbols,
         activity: Activity,
         container: LinearLayout,
         palette: FxDialogPalette,
@@ -1306,6 +1332,32 @@ object FxSettingsInjectorHook {
             )
         }
         container.addView(clearBtn)
+
+        if (symbols.profile == FxProfile.DEXKIT_DYNAMIC || DexSymbolCache.hasCache(activity)) {
+            val clearDexCacheBtn = makeThemedButton(
+                context = activity,
+                label = "清除 DexKit 符号缓存",
+                primary = false,
+                palette = palette
+            ) {
+                val cleared = DexSymbolCache.clear(activity)
+                val msg = if (cleared) {
+                    "已清除 DexKit 符号缓存，重启 FX 后生效"
+                } else {
+                    "当前无本地 DexKit 符号缓存"
+                }
+                Toast.makeText(activity, msg, Toast.LENGTH_SHORT).show()
+                onCleared()
+            }.apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    topMargin = dp(activity, 6)
+                }
+            }
+            container.addView(clearDexCacheBtn)
+        }
     }
 
     private fun makeChip(

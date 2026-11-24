@@ -59,6 +59,8 @@ jobs:
           with zipfile.ZipFile(sys.argv[1]) as zf:
               names = set(zf.namelist())
               assert "classes.dex" in names, "classes.dex missing"
+              assert "lib/arm64-v8a/libdexkit.so" in names, "arm64-v8a libdexkit.so missing"
+              assert "lib/armeabi-v7a/libdexkit.so" in names, "armeabi-v7a libdexkit.so missing"
               assert "assets/xposed_init" not in names, "legacy assets/xposed_init must be absent"
               prop_raw = zf.read("META-INF/xposed/module.prop")
               assert b"\r" not in prop_raw, "module.prop contains CR"
@@ -207,7 +209,7 @@ jobs:
           fi
           test -s "$RAW_APK"
 
-          "$BUILD_TOOLS/zipalign" -f -p 4 "$RAW_APK" work/aligned.apk
+          "$BUILD_TOOLS/zipalign" -f -P 16 4 "$RAW_APK" work/aligned.apk
 
           if [[ -n "${SIGNING_KEYSTORE_BASE64:-}" && -n "${SIGNING_PASSWORD:-}" ]]; then
             umask 077
@@ -265,6 +267,8 @@ jobs:
           with zipfile.ZipFile(sys.argv[1]) as zf:
               names = set(zf.namelist())
               assert "classes.dex" in names
+              assert "lib/arm64-v8a/libdexkit.so" in names, "arm64-v8a libdexkit.so missing"
+              assert "lib/armeabi-v7a/libdexkit.so" in names, "armeabi-v7a libdexkit.so missing"
               assert "assets/xposed_init" not in names
               prop_raw = zf.read("META-INF/xposed/module.prop")
               assert b"\r" not in prop_raw
@@ -316,7 +320,7 @@ jobs:
           ## fxplusmodule ${TAG}
 
           - Xposed API: libxposed API 102
-          - Target: nextapp.fx (9012 / 9108)
+          - Target: nextapp.fx (9012 / 9108 + DexKit 2.3.0 dynamic adaptation)
           - APK: \`${{ steps.sign.outputs.apk_name }}\`
           - Signer SHA-256: \`${{ steps.sign.outputs.cert_sha256 }}\`
 

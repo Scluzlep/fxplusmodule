@@ -4,8 +4,19 @@ import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Matrix
+import android.graphics.Movie
+import android.graphics.Paint
+import android.graphics.Rect
 import android.os.Build
+import android.util.Log
+import android.view.View
+import android.widget.ProgressBar
 import com.scluzlep.fxplusmodule.config.ConfigContract
+import java.io.File
+import java.io.InputStream
 import java.lang.reflect.Constructor
 import java.lang.reflect.Field
 import java.lang.reflect.Method
@@ -13,6 +24,7 @@ import java.lang.reflect.Method
 enum class FxProfile {
     FX_9012,
     FX_9108,
+    DEXKIT_DYNAMIC,
     STRUCTURAL_FALLBACK
 }
 
@@ -313,6 +325,7 @@ object FxDexContracts {
             DexMethodSpec("nextapp.fx.ui.viewer.image.ImageDisplay", "U", "(Landroid/graphics/Bitmap;Z)V", false),
             DexMethodSpec("nextapp.fx.ui.viewer.image.ImageDisplay", "V", "(Landroid/graphics/Movie;)V", false),
             DexMethodSpec("nextapp.fx.ui.viewer.image.ImageDisplay", "W", "()V", false),
+            DexMethodSpec("dd.l", "a", "(Ldd/f;)V", false),
             DexMethodSpec("nextapp.fx.ui.ExplorerActivity", "onResume", "()V", false),
             DexMethodSpec("nextapp.fx.ui.ExplorerActivity", "onDestroy", "()V", false),
             DexMethodSpec("nextapp.fx.ui.content.h0", "s", "(Lnextapp/fx/ui/content/e2;)V", false),
@@ -420,6 +433,8 @@ object FxDexContracts {
 
             // Live FX theme palette, Home overflow menu, and Google Drive OAuth (v1.3)
             DexFieldSpec("nextapp.fx.ui.viewer.image.ImageViewerActivity", "R5", "Landroid/widget/ProgressBar;", false),
+            DexFieldSpec("v8.f", "f", "I", false),
+            DexFieldSpec("v8.f", "i", "I", false),
             DexFieldSpec("nextapp.fx.ui.widget.k", "ui", "Lxc/f;", false),
             DexFieldSpec("xc.f", "j", "Z", false),
             DexFieldSpec("xc.f", "l", "I", false),
@@ -704,7 +719,8 @@ object FxDexContracts {
             DexMethodSpec("nextapp.fx.ui.res.ActionIcons", "b", "(Landroid/content/res/Resources;Ljava/lang/String;I)Lsa/h;", true),
             DexMethodSpec("nextapp.fx.plus.ui.net.cloud.GoogleDriveAuthActivity", "onCreate", "(Landroid/os/Bundle;)V", false),
             DexMethodSpec("gg.d", "<init>", "(Ld4/b;Landroid/net/Uri;)V", false),
-            DexMethodSpec("jh.b", "<init>", "(ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;)V", false)
+            DexMethodSpec("jh.b", "<init>", "(ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;)V", false),
+            DexMethodSpec("kf.k", "a", "(Lkf/f;)V", false)
         )
 
         val fields = listOf(
@@ -808,6 +824,8 @@ object FxDexContracts {
 
             // Live FX theme palette, Home overflow menu, and Google Drive OAuth (v1.3)
             DexFieldSpec("nextapp.fx.ui.viewer.image.ImageViewerActivity", "N2", "Landroid/widget/ProgressBar;", false),
+            DexFieldSpec("pa.c", "f", "I", false),
+            DexFieldSpec("pa.c", "i", "I", false),
             DexFieldSpec("nextapp.fx.ui.widget.n", "ui", "Lef/g;", false),
             DexFieldSpec("ef.g", "j", "Z", false),
             DexFieldSpec("ef.g", "l", "I", false),
@@ -867,6 +885,7 @@ data class SiblingBindings(
     val displayCommitMethod: Method?,
     val siblingCallbackClass: Class<*>?,
     val siblingCallbackLoadedMethod: Method?,
+    val siblingCallbackFailMethod: Method? = null,
     val siblingCallbackActivityField: Field?,
     val displayListenerClass: Class<*>?,
     val displayListenerRequestMethod: Method?,
@@ -895,12 +914,16 @@ data class ViewerPrefetchBindings(
     val viewerDecodeItem: Method?,
     val viewerStreamProviderRead: Method?,
     val viewerStreamProviderItemField: Field?,
+    val viewerOpenStreamMethod: Method? = null,
+    val taskThreadCtor: Constructor<*>? = null,
+    val viewerProgressBarField: Field? = null,
     val remoteItemClasses: List<Class<*>>
 )
 
 data class RemoteThumbBindings(
     val loadThumbnail: Method?,
     val thumbCallbackClass: Class<*>?,
+    val thumbCallbackEnqueueMethod: Method? = null,
     val thumbTaskItemField: Field?,
     val thumbTaskContextField: Field?,
     val thumbTaskGetCacheFile: Method?,
@@ -908,6 +931,7 @@ data class RemoteThumbBindings(
     val remoteThumbTaskMimeField: Field?,
     val remoteThumbWorkerRun: Method?,
     val remoteThumbWorkerCaseField: Field?,
+    val remoteThumbWorkerCaseId: Int = 2,
     val remoteThumbWorkerOwnerField: Field?,
     val remoteThumbWorkerResultField: Field?,
     val thumbResultField: Field?,
@@ -923,6 +947,8 @@ data class RemoteThumbBindings(
     val thumbGeneratorExceedsCap: Method?,
     val thumbGeneratorGenerate: Method?,
     val thumbGeneratorClass: Class<*>?,
+    val dimWidthField: Field? = null,
+    val dimHeightField: Field? = null,
     val settingsGetInstance: Method?,
     val settingsThumbsEnabled: Method?,
     val settingsThumbsForPath: Method?,
@@ -962,6 +988,7 @@ data class HomeMenuBindings(
     val homeViewResField: Field?,
     val menuContribClass: Class<*>?,
     val menuContribCaseField: Field?,
+    val menuContribCaseId: Int = 14,
     val menuContribOwnerField: Field?,
     val menuContribBgLightField: Field?,
     val menuContribPopulateMethod: Method?,
@@ -1033,6 +1060,7 @@ data class BonusLimitsBindings(
     val textViewerOpenBinaryXml: Method?,
     val textViewerWorkerRun: Method?,
     val textViewerWorkerCaseField: Field?,
+    val textViewerWorkerCaseId: Int = 0,
     val textViewerWorkerActivityField: Field?,
     val textViewerWorkerCtor: Constructor<*>?,
     val textViewerLinesField: Field?,
@@ -1050,16 +1078,75 @@ data class BonusLimitsBindings(
     val mimeProbeBytes: Method?,
     val textEditReadStream: Method?,
     val textEditResultCtor: Constructor<*>?,
+    val textEditResultCaseId: Int = 7,
     val execLoadPreview: Method?,
     val execApplyPreview: Method?,
     val execWorkerRun: Method?,
     val execWorkerCaseField: Field?,
+    val execWorkerCaseId: Int = 19,
     val execWorkerArg1Field: Field?,
     val execWorkerArg2Field: Field?,
     val execUiRunnableCtor: Constructor<*>?,
+    val execUiRunnableCaseId: Int = 6,
     val execLinesField: Field?,
     val execCharsetField: Field?,
     val execUnsupportedField: Field?
+)
+
+data class HardwareRenderBindings(
+    val touchClass: Class<*>?,
+    val setImageBitmap: Method?,
+    val setImageMovie: Method?,
+    val setImageNull: Method?,
+    val setPrescale: Method?,
+    val setTouchEnabled: Method?,
+    val zoomFit: Method?,
+    val onDraw: Method?,
+    val onDetachedFromWindow: Method?,
+    val updateBoundsMethod: Method?,
+    val enforceLayerOnBitmapMethod: Method?,
+    val bitmapField: Field?,
+    val movieField: Field?,
+    val moviePlayingField: Field?,
+    val movieThreadField: Field?,
+    val matrixField: Field?,
+    val paintField: Field?,
+    val cropArField: Field?,
+    val cropRectField: Field?,
+    val softwareLayerFlagField: Field?,
+    val displaySizeField: Field?,
+    val displaySizeWidthField: Field?,
+    val displaySizeHeightField: Field?,
+    val needsZoomFitField: Field?,
+    val imageDisplayClass: Class<*>?,
+    val deliverBitmapMethod: Method?,
+    val deliverMovieMethod: Method?,
+    val clearDisplayMethod: Method?,
+    val displayBitmapField: Field?,
+    val displayMovieField: Field?,
+    val displayDisposedField: Field?,
+    val displayFullLoadedField: Field?,
+    val displayPreviewLoadedField: Field?,
+    val viewerClass: Class<*>?,
+    val loadMediaMethod: Method?,
+    val loadGifMethod: Method?,
+    val applyBitmapResultMethod: Method?,
+    val imageResultCtor: Constructor<*>?,
+    val loadTokenField: Field?,
+    val isGifField: Field?,
+    val currentHolderField: Field?,
+    val enterTransitionField: Field?,
+    val transitionBgViewField: Field?,
+    val transitionTopBarField: Field?,
+    val transitionBottomBarField: Field?,
+    val transitionRunningField: Field?,
+    val transitionDoneField: Field?,
+    val uiHandlerField: Field?,
+    val holderFileItemField: Field?,
+    val holderUriField: Field?,
+    val gifAnimatedCheckMethod: Method?,
+    val localPathClass: Class<*>?,
+    val localPathMethod: Method?
 )
 
 data class FolderLifecycleBindings(
@@ -1090,7 +1177,9 @@ data class ResolvedSymbols(
     val bonusLimits: BonusLimitsBindings,
     val folderLifecycle: FolderLifecycleBindings,
     val homeMenu: HomeMenuBindings,
-    val googleDrive: GoogleDriveBindings
+    val googleDrive: GoogleDriveBindings,
+    val hardwareRender: HardwareRenderBindings,
+    val symbolResolutionSource: String = ""
 )
 
 /**
@@ -1143,12 +1232,507 @@ object FxSymbolResolver {
     }
 
     fun resolve(classLoader: ClassLoader, versionCode: Long): ResolvedSymbols {
+        return resolve(
+            classLoader = classLoader,
+            versionCode = versionCode,
+            targetAppInfo = null,
+            moduleAppInfo = null,
+            onLog = null
+        )
+    }
+
+    fun resolve(
+        classLoader: ClassLoader,
+        versionCode: Long,
+        targetAppInfo: ApplicationInfo? = null,
+        moduleAppInfo: ApplicationInfo? = null,
+        onLog: ((Int, String, Throwable?) -> Unit)? = null
+    ): ResolvedSymbols {
         val profile = detectProfile(classLoader, versionCode)
-        return when (profile) {
-            FxProfile.FX_9012 -> resolve9012(classLoader, versionCode)
-            FxProfile.FX_9108 -> resolve9108(classLoader, versionCode)
-            FxProfile.STRUCTURAL_FALLBACK -> resolveStructuralFallback(classLoader, versionCode)
+        if (profile == FxProfile.FX_9012) {
+            return resolve9012(classLoader, versionCode)
         }
+        if (profile == FxProfile.FX_9108) {
+            return resolve9108(classLoader, versionCode)
+        }
+
+        // Tier 2: persisted DexKit symbol manifest (zero native load overhead on cache hit).
+        val cacheDir = DexSymbolCache.resolveCacheDir(targetAppInfo?.dataDir)
+        val fingerprint = DexSymbolCache.computeFingerprint(versionCode, targetAppInfo, moduleAppInfo)
+        val cached = DexSymbolCache.load(cacheDir, fingerprint)
+        if (cached != null && cached.isUsable()) {
+            onLog?.invoke(
+                Log.INFO,
+                "Loaded cached DexKit symbol manifest (v$versionCode, fp=${fingerprint.take(12)})",
+                null
+            )
+            return hydrateFromManifest(classLoader, versionCode, cached, "dexkit:cache")
+        }
+
+        // Tier 3: live DexKit 2.3.0 scan + atomic manifest persistence.
+        val scanned = FxDexKitResolver.scanAndBuildManifest(
+            classLoader = classLoader,
+            versionCode = versionCode,
+            fingerprint = fingerprint,
+            targetAppInfo = targetAppInfo,
+            moduleAppInfo = moduleAppInfo,
+            onLog = onLog
+        )
+        if (scanned != null && scanned.isUsable()) {
+            val saved = DexSymbolCache.save(cacheDir, scanned)
+            onLog?.invoke(
+                Log.INFO,
+                "DexKit scan succeeded (v$versionCode, classes=${scanned.classes.size}, methods=${scanned.methods.size}, fields=${scanned.fields.size}, saved=$saved)",
+                null
+            )
+            return hydrateFromManifest(classLoader, versionCode, scanned, "dexkit:scan")
+        }
+
+        // Tier 4: safe structural fallback.
+        onLog?.invoke(
+            Log.WARN,
+            "DexKit resolution unavailable for versionCode=$versionCode; falling back to public signatures",
+            null
+        )
+        return resolveStructuralFallback(classLoader, versionCode)
+    }
+
+    internal fun hydrateFromManifest(
+        cl: ClassLoader,
+        versionCode: Long,
+        manifest: FxSymbolManifest,
+        source: String
+    ): ResolvedSymbols {
+        fun cls(key: String): Class<*>? = manifest.classes[key]?.let { DexSymbolCache.resolveClass(cl, it) }
+        fun mtd(key: String): Method? = manifest.methods[key]?.let { DexSymbolCache.resolveMethod(cl, it) }
+        fun ctor(key: String): Constructor<*>? = manifest.methods[key]?.let { DexSymbolCache.resolveConstructor(cl, it) }
+        fun fld(key: String): Field? = manifest.fields[key]?.let { DexSymbolCache.resolveField(cl, it) }
+
+        val viewerClass = cls(FxSymbolKeys.CLS_IMAGE_VIEWER_ACTIVITY)
+            ?: loadClass(cl, "nextapp.fx.ui.viewer.image.ImageViewerActivity")
+        val imageDisplayClass = cls(FxSymbolKeys.CLS_IMAGE_DISPLAY)
+            ?: loadClass(cl, "nextapp.fx.ui.viewer.image.ImageDisplay")
+        val dirCatalogClass = cls(FxSymbolKeys.CLS_DIR_CATALOG)
+            ?: loadClass(cl, "nextapp.xf.dir.DirectoryCatalog")
+        val dirOptStoreClass = cls(FxSymbolKeys.CLS_DIRECTORY_OPTION_STORE)
+            ?: loadClass(cl, "nextapp.fx.dir.optionstore.DirectoryOptionStore")
+        val fileCatalogClass = cls(FxSymbolKeys.CLS_FILE_CATALOG)
+            ?: loadClass(cl, "nextapp.fx.dirimpl.file.FileCatalog")
+        val explorerActivityClass = cls(FxSymbolKeys.CLS_EXPLORER_ACTIVITY)
+            ?: loadClass(cl, "nextapp.fx.ui.ExplorerActivity")
+        val homeContentViewClass = cls(FxSymbolKeys.CLS_HOME_CONTENT_VIEW)
+            ?: loadClass(cl, "nextapp.fx.ui.homecontent.HomeContentView")
+        val touchClass = cls(FxSymbolKeys.CLS_TOUCH_DISPLAY)
+            ?: loadClass(cl, "nextapp.maui.ui.imageview.TouchImageDisplay")
+        val mainPrefClass = loadClass(cl, "nextapp.fx.ui.fxsystem.MainPrefActivity")
+        val labelPrefClass = loadClass(cl, "nextapp.maui.ui.preference.LabelPreference")
+        val gdriveAuthClass = loadClass(cl, "nextapp.fx.plus.ui.net.cloud.GoogleDriveAuthActivity")
+        val viewerBaseClass = cls(FxSymbolKeys.CLS_VIEWER_BASE) ?: viewerClass?.superclass
+        val siblingCbClass = cls(FxSymbolKeys.CLS_SIBLING_CALLBACK)
+
+        val sibling = SiblingBindings(
+            siblingLoaderClass = cls(FxSymbolKeys.CLS_SIBLING_LOADER),
+            enumerateSiblings = mtd(FxSymbolKeys.MTD_ENUMERATE_SIBLINGS),
+            supportedMimesField = fld(FxSymbolKeys.FLD_SUPPORTED_MIMES),
+            directoryOptionStoreClass = dirOptStoreClass,
+            getSortOptions = mtd(FxSymbolKeys.MTD_GET_SORT_OPTIONS),
+            sortPairOrderField = fld(FxSymbolKeys.FLD_SORT_PAIR_ORDER),
+            sortPairDescField = fld(FxSymbolKeys.FLD_SORT_PAIR_DESC),
+            sortItems = mtd(FxSymbolKeys.MTD_SORT_ITEMS),
+            fileItemClass = cls(FxSymbolKeys.CLS_FILE_ITEM),
+            fileItemBaseClass = cls(FxSymbolKeys.CLS_FILE_ITEM_BASE),
+            dirItemClass = cls(FxSymbolKeys.CLS_DIR_ITEM),
+            listChildren = mtd(FxSymbolKeys.MTD_LIST_CHILDREN),
+            getMimeType = mtd(FxSymbolKeys.MTD_GET_MIME_TYPE),
+            getSize = mtd(FxSymbolKeys.MTD_GET_SIZE) ?: declaredMethod(cls(FxSymbolKeys.CLS_FILE_ITEM), "getSize"),
+            getPath = mtd(FxSymbolKeys.MTD_GET_PATH) ?: declaredMethod(cls(FxSymbolKeys.CLS_FILE_ITEM_BASE), "getPath"),
+            getName = mtd(FxSymbolKeys.MTD_GET_NAME) ?: declaredMethod(cls(FxSymbolKeys.CLS_FILE_ITEM_BASE), "getName"),
+            getLastModified = mtd(FxSymbolKeys.MTD_GET_LAST_MODIFIED)
+                ?: declaredMethod(cls(FxSymbolKeys.CLS_FILE_ITEM_BASE), "getLastModified"),
+            openInputStream = mtd(FxSymbolKeys.MTD_OPEN_INPUT_STREAM),
+            getCatalog = mtd(FxSymbolKeys.MTD_GET_CATALOG),
+            dirCatalogClass = dirCatalogClass,
+            getCatalogType = mtd(FxSymbolKeys.MTD_GET_CATALOG_TYPE)
+                ?: declaredMethod(dirCatalogClass, "getType"),
+            isRemoteMethod = mtd(FxSymbolKeys.MTD_IS_REMOTE),
+            imageViewerActivityClass = viewerClass,
+            viewerSiblingItemsField = fld(FxSymbolKeys.FLD_VIEWER_SIBLING_ITEMS),
+            viewerSortOrderField = fld(FxSymbolKeys.FLD_VIEWER_SORT_ORDER),
+            viewerSortDescField = fld(FxSymbolKeys.FLD_VIEWER_SORT_DESC),
+            viewerCurrentDisplayField = fld(FxSymbolKeys.FLD_VIEWER_CURRENT_DISPLAY),
+            viewerCurrentHolderField = fld(FxSymbolKeys.FLD_VIEWER_CURRENT_HOLDER),
+            viewerInitialItemField = fld(FxSymbolKeys.FLD_VIEWER_INITIAL_ITEM),
+            viewerSiblingsLoadedField = fld(FxSymbolKeys.FLD_VIEWER_SIBLINGS_LOADED),
+            imageDisplayClass = imageDisplayClass,
+            displaySiblingIndexField = fld(FxSymbolKeys.FLD_DISPLAY_SIBLING_INDEX),
+            displaySiblingCountField = fld(FxSymbolKeys.FLD_DISPLAY_SIBLING_COUNT),
+            displayListenerField = fld(FxSymbolKeys.FLD_DISPLAY_LISTENER),
+            displayCommitMethod = mtd(FxSymbolKeys.MTD_DISPLAY_COMMIT),
+            siblingCallbackClass = siblingCbClass,
+            siblingCallbackLoadedMethod = mtd(FxSymbolKeys.MTD_SIBLING_CB_LOADED),
+            siblingCallbackFailMethod = mtd(FxSymbolKeys.MTD_SIBLING_CB_FAIL)
+                ?: declaredMethod(siblingCbClass, "b"),
+            siblingCallbackActivityField = fld(FxSymbolKeys.FLD_SIBLING_CB_ACTIVITY),
+            displayListenerClass = cls(FxSymbolKeys.CLS_DISPLAY_LISTENER),
+            displayListenerRequestMethod = mtd(FxSymbolKeys.MTD_DISPLAY_LISTENER_REQUEST),
+            displayListenerCommitMethod = mtd(FxSymbolKeys.MTD_DISPLAY_LISTENER_COMMIT),
+            displayListenerHolderField = fld(FxSymbolKeys.FLD_DISPLAY_LISTENER_HOLDER),
+            runnerDirField = fld(FxSymbolKeys.FLD_RUNNER_DIR),
+            runnerCtxField = fld(FxSymbolKeys.FLD_RUNNER_CTX),
+            runnerSortOrderField = fld(FxSymbolKeys.FLD_RUNNER_SORT_ORDER),
+            runnerSortDescField = fld(FxSymbolKeys.FLD_RUNNER_SORT_DESC),
+            runnerCurrentItemField = fld(FxSymbolKeys.FLD_RUNNER_CURRENT_ITEM),
+            runnerCallbackHolderField = fld(FxSymbolKeys.FLD_RUNNER_CALLBACK_HOLDER),
+            itemHolderFileItemField = fld(FxSymbolKeys.FLD_ITEM_HOLDER_FILE_ITEM),
+            itemHolderUriField = fld(FxSymbolKeys.FLD_ITEM_HOLDER_URI)
+        )
+
+        val remoteItemClasses = manifest.stringLists[FxSymbolKeys.LIST_REMOTE_ITEM_CLASSES]
+            .orEmpty()
+            .mapNotNull { DexSymbolCache.resolveClass(cl, it) }
+
+        val viewerProgressBarField = fld(FxSymbolKeys.FLD_VIEWER_PROGRESS_BAR)
+            ?: viewerClass?.declaredFields?.singleOrNull { it.type == ProgressBar::class.java }
+                ?.apply { isAccessible = true }
+
+        val viewer = ViewerPrefetchBindings(
+            viewerBaseClass = viewerBaseClass,
+            mirrorRemoteTempFile = mtd(FxSymbolKeys.MTD_MIRROR_REMOTE_TEMP_FILE),
+            viewerOnCreate = mtd(FxSymbolKeys.MTD_VIEWER_ON_CREATE)
+                ?: declaredMethod(viewerClass, "onCreate", android.os.Bundle::class.java),
+            viewerOnDestroy = mtd(FxSymbolKeys.MTD_VIEWER_ON_DESTROY)
+                ?: viewerBaseClass?.let { declaredMethod(it, "onDestroy") },
+            viewerLoadMediaAndBitmap = mtd(FxSymbolKeys.MTD_VIEWER_LOAD_MEDIA_AND_BITMAP),
+            viewerLoadMedia = mtd(FxSymbolKeys.MTD_VIEWER_LOAD_MEDIA),
+            viewerLoadBitmap = mtd(FxSymbolKeys.MTD_VIEWER_LOAD_BITMAP),
+            viewerLoadGif = mtd(FxSymbolKeys.MTD_VIEWER_LOAD_GIF),
+            viewerOpenItemStream = mtd(FxSymbolKeys.MTD_VIEWER_OPEN_ITEM_STREAM),
+            viewerDecodeItem = mtd(FxSymbolKeys.MTD_VIEWER_DECODE_ITEM),
+            viewerStreamProviderRead = mtd(FxSymbolKeys.MTD_VIEWER_STREAM_PROVIDER_READ),
+            viewerStreamProviderItemField = fld(FxSymbolKeys.FLD_VIEWER_STREAM_PROVIDER_ITEM),
+            viewerOpenStreamMethod = mtd(FxSymbolKeys.MTD_VIEWER_OPEN_STREAM),
+            taskThreadCtor = ctor(FxSymbolKeys.CTR_TASK_THREAD),
+            viewerProgressBarField = viewerProgressBarField,
+            remoteItemClasses = remoteItemClasses
+        )
+
+        val thumbCallbackClass = cls(FxSymbolKeys.CLS_THUMB_CALLBACK)
+        val thumbCallbackEnqueue = mtd(FxSymbolKeys.MTD_THUMB_CB_ENQUEUE)
+            ?: thumbCallbackClass?.declaredMethods?.singleOrNull { it.parameterTypes.size == 1 }
+                ?.apply { isAccessible = true }
+
+        val remoteThumb = RemoteThumbBindings(
+            loadThumbnail = mtd(FxSymbolKeys.MTD_LOAD_THUMBNAIL),
+            thumbCallbackClass = thumbCallbackClass,
+            thumbCallbackEnqueueMethod = thumbCallbackEnqueue,
+            thumbTaskItemField = fld(FxSymbolKeys.FLD_THUMB_TASK_ITEM),
+            thumbTaskContextField = fld(FxSymbolKeys.FLD_THUMB_TASK_CONTEXT),
+            thumbTaskGetCacheFile = mtd(FxSymbolKeys.MTD_THUMB_TASK_GET_CACHE_FILE),
+            remoteThumbTaskCtor = ctor(FxSymbolKeys.CTR_REMOTE_THUMB_TASK),
+            remoteThumbTaskMimeField = fld(FxSymbolKeys.FLD_REMOTE_THUMB_TASK_MIME),
+            remoteThumbWorkerRun = mtd(FxSymbolKeys.MTD_REMOTE_THUMB_WORKER_RUN),
+            remoteThumbWorkerCaseField = fld(FxSymbolKeys.FLD_REMOTE_THUMB_WORKER_CASE),
+            remoteThumbWorkerCaseId = manifest.ints[FxSymbolKeys.INT_REMOTE_THUMB_WORKER_CASE_ID] ?: 2,
+            remoteThumbWorkerOwnerField = fld(FxSymbolKeys.FLD_REMOTE_THUMB_WORKER_OWNER),
+            remoteThumbWorkerResultField = fld(FxSymbolKeys.FLD_REMOTE_THUMB_WORKER_RESULT),
+            thumbResultField = fld(FxSymbolKeys.FLD_THUMB_RESULT),
+            thumbGeneratorCreateForFile = mtd(FxSymbolKeys.MTD_THUMB_GEN_CREATE_FOR_FILE),
+            thumbGeneratorFlagsField = fld(FxSymbolKeys.FLD_THUMB_GEN_FLAGS),
+            thumbGeneratorContextField = fld(FxSymbolKeys.FLD_THUMB_GEN_CONTEXT),
+            thumbGeneratorStreamField = fld(FxSymbolKeys.FLD_THUMB_GEN_STREAM),
+            thumbGeneratorOutFileField = fld(FxSymbolKeys.FLD_THUMB_GEN_OUT_FILE),
+            thumbGeneratorSourcePathField = fld(FxSymbolKeys.FLD_THUMB_GEN_SOURCE_PATH),
+            thumbGeneratorStreamRead = mtd(FxSymbolKeys.MTD_THUMB_GEN_STREAM_READ),
+            thumbImageInfoCtor = ctor(FxSymbolKeys.CTR_THUMB_IMAGE_INFO),
+            thumbGeneratorRun = mtd(FxSymbolKeys.MTD_THUMB_GEN_RUN),
+            thumbGeneratorExceedsCap = mtd(FxSymbolKeys.MTD_THUMB_GEN_EXCEEDS_CAP),
+            thumbGeneratorGenerate = mtd(FxSymbolKeys.MTD_THUMB_GEN_GENERATE),
+            thumbGeneratorClass = cls(FxSymbolKeys.CLS_THUMB_GENERATOR),
+            dimWidthField = fld(FxSymbolKeys.FLD_DIM_WIDTH),
+            dimHeightField = fld(FxSymbolKeys.FLD_DIM_HEIGHT),
+            settingsGetInstance = mtd(FxSymbolKeys.MTD_SETTINGS_GET_INSTANCE),
+            settingsThumbsEnabled = mtd(FxSymbolKeys.MTD_SETTINGS_THUMBS_ENABLED),
+            settingsThumbsForPath = mtd(FxSymbolKeys.MTD_SETTINGS_THUMBS_FOR_PATH),
+            remoteItemMarkerClass = cls(FxSymbolKeys.CLS_REMOTE_ITEM_MARKER),
+            cloudThumbMarkerClass = cls(FxSymbolKeys.CLS_CLOUD_THUMB_MARKER),
+            dropboxSupportsThumb = mtd(FxSymbolKeys.MTD_DROPBOX_SUPPORTS_THUMB)
+        )
+
+        val fxDialogCtor = ctor(FxSymbolKeys.CTR_FX_DIALOG)
+        val dialogClass = fxDialogCtor?.declaringClass ?: findDialogClass(cl)
+        val resolvedDialogCtor = fxDialogCtor ?: dialogClass?.declaredConstructors?.firstOrNull { c ->
+            val p = c.parameterTypes
+            p.size == 2 && p[0] == Context::class.java && p[1].isEnum
+        }?.apply { isAccessible = true }
+        val fxDialogStyleWithClose = runCatching {
+            fld(FxSymbolKeys.CLS_FX_DIALOG_STYLE_WITH_CLOSE_FIELD)?.get(null)
+        }.getOrNull()
+            ?: cls(FxSymbolKeys.CLS_FX_DIALOG_STYLE_WITH_CLOSE_ENUM)?.enumConstants?.getOrNull(1)
+            ?: resolvedDialogCtor?.parameterTypes?.getOrNull(1)?.enumConstants?.getOrNull(1)
+
+        val settings = NativeSettingsBindings(
+            mainPrefOnCreate = mtd(FxSymbolKeys.MTD_MAIN_PREF_ON_CREATE)
+                ?: declaredMethod(mainPrefClass, "onCreate", android.os.Bundle::class.java),
+            mainPrefOnResume = mtd(FxSymbolKeys.MTD_MAIN_PREF_ON_RESUME)
+                ?: declaredMethod(mainPrefClass, "onResume"),
+            labelPreferenceCtor = ctor(FxSymbolKeys.CTR_LABEL_PREFERENCE)
+                ?: declaredConstructor(labelPrefClass, Context::class.java),
+            fxDialogCtor = resolvedDialogCtor,
+            fxDialogDefaultWithClose = fxDialogStyleWithClose,
+            fxDialogSetHeader = mtd(FxSymbolKeys.MTD_FX_DIALOG_SET_HEADER)
+                ?: declaredMethod(dialogClass, "setHeader", CharSequence::class.java),
+            fxDialogSetDescription = mtd(FxSymbolKeys.MTD_FX_DIALOG_SET_DESCRIPTION)
+                ?: declaredMethod(dialogClass, "setDescription", CharSequence::class.java),
+            fxDialogGetDefaultContentLayout = mtd(FxSymbolKeys.MTD_FX_DIALOG_GET_DEFAULT_LAYOUT)
+                ?: declaredMethod(dialogClass, "getDefaultContentLayout"),
+            fxDialogAddLabeledView = mtd(FxSymbolKeys.MTD_FX_DIALOG_ADD_LABELED_VIEW)
+                ?: declaredMethod(dialogClass, "addLabeledView", CharSequence::class.java, View::class.java),
+            fxDialogIsBackgroundLight = mtd(FxSymbolKeys.MTD_FX_DIALOG_IS_BG_LIGHT)
+                ?: declaredMethod(dialogClass, "isBackgroundLight"),
+            fxDialogDismiss = mtd(FxSymbolKeys.MTD_FX_DIALOG_DISMISS)
+                ?: declaredMethod(dialogClass, "dismiss"),
+            fxDialogShow = mtd(FxSymbolKeys.MTD_FX_DIALOG_SHOW)
+                ?: dialogClass?.superclass?.let { declaredMethod(it, "show") },
+            fxDialogUiField = fld(FxSymbolKeys.FLD_FX_DIALOG_UI)
+                ?: declaredField(dialogClass, "ui"),
+            uiGetForContext = mtd(FxSymbolKeys.MTD_UI_GET_FOR_CONTEXT),
+            uiIsWindowLightField = fld(FxSymbolKeys.FLD_UI_IS_WINDOW_LIGHT),
+            uiTextPrimaryField = fld(FxSymbolKeys.FLD_UI_TEXT_PRIMARY),
+            uiTextSecondaryField = fld(FxSymbolKeys.FLD_UI_TEXT_SECONDARY),
+            uiBoxBgField = fld(FxSymbolKeys.FLD_UI_BOX_BG),
+            uiBoxPressedBgField = fld(FxSymbolKeys.FLD_UI_BOX_PRESSED_BG),
+            uiWindowBgMethod = mtd(FxSymbolKeys.MTD_UI_WINDOW_BG),
+            uiTrimAccentMethod = mtd(FxSymbolKeys.MTD_UI_TRIM_ACCENT),
+            uiTrimBaseMethod = mtd(FxSymbolKeys.MTD_UI_TRIM_BASE)
+        )
+
+        val fileBaseClass = cls(FxSymbolKeys.CLS_FILE_NODE_BASE)
+        val androidData = AndroidDataBindings(
+            fileCatalogClass = fileCatalogClass,
+            fileCatalogOpenDir = mtd(FxSymbolKeys.MTD_FILE_CATALOG_OPEN_DIR),
+            fileCatalogResolveFile = mtd(FxSymbolKeys.MTD_FILE_CATALOG_RESOLVE_FILE),
+            fileCatalogSafUriField = fld(FxSymbolKeys.FLD_FILE_CATALOG_SAF_URI),
+            fileDirNodeClass = cls(FxSymbolKeys.CLS_FILE_DIR_NODE),
+            fileDirListChildren = mtd(FxSymbolKeys.MTD_FILE_DIR_LIST_CHILDREN),
+            fileDirMkdir = mtd(FxSymbolKeys.MTD_FILE_DIR_MKDIR),
+            fileDirChildAvailable = mtd(FxSymbolKeys.MTD_FILE_DIR_CHILD_AVAILABLE),
+            fileDirDeleteRecursive = mtd(FxSymbolKeys.MTD_FILE_DIR_DELETE_RECURSIVE),
+            fileDirStatVolume = mtd(FxSymbolKeys.MTD_FILE_DIR_STAT_VOLUME),
+            fileDirClearCache = mtd(FxSymbolKeys.MTD_FILE_DIR_CLEAR_CACHE),
+            fileDirCachedFilesField = fld(FxSymbolKeys.FLD_FILE_DIR_CACHED_FILES),
+            fileFileNodeClass = cls(FxSymbolKeys.CLS_FILE_FILE_NODE),
+            fileFileCtor = ctor(FxSymbolKeys.CTR_FILE_FILE),
+            fileFileStatSize = mtd(FxSymbolKeys.MTD_FILE_FILE_STAT_SIZE),
+            fileFileCachedSizeField = fld(FxSymbolKeys.FLD_FILE_FILE_CACHED_SIZE),
+            fileFileOpenInput = mtd(FxSymbolKeys.MTD_FILE_FILE_OPEN_INPUT),
+            fileFileOpenOutputInternal = mtd(FxSymbolKeys.MTD_FILE_FILE_OPEN_OUTPUT_INTERNAL),
+            fileFileDelete = mtd(FxSymbolKeys.MTD_FILE_FILE_DELETE),
+            fileNodeBaseClass = fileBaseClass,
+            fileNodeDeleteSingle = mtd(FxSymbolKeys.MTD_FILE_NODE_DELETE_SINGLE),
+            fileNodeRename = mtd(FxSymbolKeys.MTD_FILE_NODE_RENAME),
+            fileNodeMoveTo = mtd(FxSymbolKeys.MTD_FILE_NODE_MOVE_TO),
+            fileNodeGetLastModified = mtd(FxSymbolKeys.MTD_FILE_NODE_GET_LAST_MODIFIED)
+                ?: declaredMethod(fileBaseClass, "getLastModified"),
+            fileNodeIsReadOnly = mtd(FxSymbolKeys.MTD_FILE_NODE_IS_READ_ONLY)
+                ?: declaredMethod(fileBaseClass, "isReadOnly"),
+            fileNodeSetLastModified = mtd(FxSymbolKeys.MTD_FILE_NODE_SET_LAST_MODIFIED),
+            fileNodeCatalogField = fld(FxSymbolKeys.FLD_FILE_NODE_CATALOG),
+            fileNodePathField = fld(FxSymbolKeys.FLD_FILE_NODE_PATH),
+            fileNodeJavaFileField = fld(FxSymbolKeys.FLD_FILE_NODE_JAVA_FILE),
+            fileNodeMetricsField = fld(FxSymbolKeys.FLD_FILE_NODE_METRICS),
+            fxPathChildCtor = ctor(FxSymbolKeys.CTR_FX_PATH_CHILD),
+            fxPathFindElement = mtd(FxSymbolKeys.MTD_FX_PATH_FIND_ELEMENT),
+            hiddenFileStoreIsHidden = mtd(FxSymbolKeys.MTD_HIDDEN_FILE_STORE_IS_HIDDEN),
+            fileDirCtor9012 = ctor(FxSymbolKeys.CTR_FILE_DIR_9012),
+            userExceptionClass = cls(FxSymbolKeys.CLS_USER_EXCEPTION),
+            cancelExceptionClass = cls(FxSymbolKeys.CLS_CANCEL_EXCEPTION)
+        )
+
+        val bonusLimits = BonusLimitsBindings(
+            textViewerLoad = mtd(FxSymbolKeys.MTD_TEXT_VIEWER_LOAD),
+            textViewerApply = mtd(FxSymbolKeys.MTD_TEXT_VIEWER_APPLY),
+            textViewerOpenBinaryXml = mtd(FxSymbolKeys.MTD_TEXT_VIEWER_OPEN_BINARY_XML),
+            textViewerWorkerRun = mtd(FxSymbolKeys.MTD_TEXT_VIEWER_WORKER_RUN),
+            textViewerWorkerCaseField = fld(FxSymbolKeys.FLD_TEXT_VIEWER_WORKER_CASE),
+            textViewerWorkerCaseId = manifest.ints[FxSymbolKeys.INT_TEXT_VIEWER_WORKER_CASE_ID] ?: 0,
+            textViewerWorkerActivityField = fld(FxSymbolKeys.FLD_TEXT_VIEWER_WORKER_ACTIVITY),
+            textViewerWorkerCtor = ctor(FxSymbolKeys.CTR_TEXT_VIEWER_WORKER),
+            textViewerLinesField = fld(FxSymbolKeys.FLD_TEXT_VIEWER_LINES),
+            textViewerCharsetField = fld(FxSymbolKeys.FLD_TEXT_VIEWER_CHARSET),
+            textViewerTruncatedField = fld(FxSymbolKeys.FLD_TEXT_VIEWER_TRUNCATED),
+            textViewerUnsupportedField = fld(FxSymbolKeys.FLD_TEXT_VIEWER_UNSUPPORTED),
+            viewerSupportHandlerField = fld(FxSymbolKeys.FLD_VIEWER_SUPPORT_HANDLER),
+            viewerSupportShowError = mtd(FxSymbolKeys.MTD_VIEWER_SUPPORT_SHOW_ERROR),
+            encodingStreamCtor = ctor(FxSymbolKeys.CTR_ENCODING_STREAM),
+            encodingStreamDetect = mtd(FxSymbolKeys.MTD_ENCODING_STREAM_DETECT),
+            encodingStreamGetCharset = mtd(FxSymbolKeys.MTD_ENCODING_STREAM_GET_CHARSET),
+            encodingStreamCharsetField = fld(FxSymbolKeys.FLD_ENCODING_STREAM_CHARSET),
+            encodingStreamGetBuffer = mtd(FxSymbolKeys.MTD_ENCODING_STREAM_GET_BUFFER),
+            encodingStreamBufferField = fld(FxSymbolKeys.FLD_ENCODING_STREAM_BUFFER),
+            mimeProbeBytes = mtd(FxSymbolKeys.MTD_MIME_PROBE_BYTES),
+            textEditReadStream = mtd(FxSymbolKeys.MTD_TEXT_EDIT_READ_STREAM),
+            textEditResultCtor = ctor(FxSymbolKeys.CTR_TEXT_EDIT_RESULT),
+            textEditResultCaseId = manifest.ints[FxSymbolKeys.INT_TEXT_EDIT_RESULT_CASE_ID] ?: 7,
+            execLoadPreview = mtd(FxSymbolKeys.MTD_EXEC_LOAD_PREVIEW),
+            execApplyPreview = mtd(FxSymbolKeys.MTD_EXEC_APPLY_PREVIEW),
+            execWorkerRun = mtd(FxSymbolKeys.MTD_EXEC_WORKER_RUN),
+            execWorkerCaseField = fld(FxSymbolKeys.FLD_EXEC_WORKER_CASE),
+            execWorkerCaseId = manifest.ints[FxSymbolKeys.INT_EXEC_WORKER_CASE_ID] ?: 19,
+            execWorkerArg1Field = fld(FxSymbolKeys.FLD_EXEC_WORKER_ARG1),
+            execWorkerArg2Field = fld(FxSymbolKeys.FLD_EXEC_WORKER_ARG2),
+            execUiRunnableCtor = ctor(FxSymbolKeys.CTR_EXEC_UI_RUNNABLE),
+            execUiRunnableCaseId = manifest.ints[FxSymbolKeys.INT_EXEC_UI_RUNNABLE_CASE_ID] ?: 6,
+            execLinesField = fld(FxSymbolKeys.FLD_EXEC_LINES),
+            execCharsetField = fld(FxSymbolKeys.FLD_EXEC_CHARSET),
+            execUnsupportedField = fld(FxSymbolKeys.FLD_EXEC_UNSUPPORTED)
+        )
+
+        val folderLifecycle = FolderLifecycleBindings(
+            explorerActivityClass = explorerActivityClass,
+            explorerOnResume = mtd(FxSymbolKeys.MTD_EXPLORER_ON_RESUME)
+                ?: declaredMethod(explorerActivityClass, "onResume"),
+            explorerOnDestroy = mtd(FxSymbolKeys.MTD_EXPLORER_ON_DESTROY)
+                ?: declaredMethod(explorerActivityClass, "onDestroy"),
+            windowManagerField = fld(FxSymbolKeys.FLD_WINDOW_MANAGER),
+            windowModelsField = fld(FxSymbolKeys.FLD_WINDOW_MODELS),
+            windowModelCloseMethod = mtd(FxSymbolKeys.MTD_WINDOW_MODEL_CLOSE),
+            windowModelSetPathMethod = mtd(FxSymbolKeys.MTD_WINDOW_MODEL_SET_PATH),
+            windowModelCurrentContentMethod = mtd(FxSymbolKeys.MTD_WINDOW_MODEL_CURRENT_CONTENT),
+            contentModelPathField = fld(FxSymbolKeys.FLD_CONTENT_MODEL_PATH),
+            fxPathClass = cls(FxSymbolKeys.CLS_FX_PATH),
+            fxPathElementsField = fld(FxSymbolKeys.FLD_FX_PATH_ELEMENTS),
+            fxPathParentMethod = mtd(FxSymbolKeys.MTD_FX_PATH_PARENT),
+            dirCatalogClass = dirCatalogClass
+        )
+
+        val menuDividerClass = cls(FxSymbolKeys.CLS_MENU_DIVIDER)
+        val menuDividerCtor = ctor(FxSymbolKeys.CTR_MENU_DIVIDER)
+            ?: declaredConstructor(menuDividerClass)
+
+        val homeMenu = HomeMenuBindings(
+            homeContentViewClass = homeContentViewClass,
+            homeViewActivityField = fld(FxSymbolKeys.FLD_HOME_VIEW_ACTIVITY)
+                ?: declaredField(homeContentViewClass, "activity"),
+            homeViewResField = fld(FxSymbolKeys.FLD_HOME_VIEW_RES)
+                ?: declaredField(homeContentViewClass, "res"),
+            menuContribClass = cls(FxSymbolKeys.CLS_MENU_CONTRIB),
+            menuContribCaseField = fld(FxSymbolKeys.FLD_MENU_CONTRIB_CASE),
+            menuContribCaseId = manifest.ints[FxSymbolKeys.INT_MENU_CONTRIB_CASE_ID] ?: 14,
+            menuContribOwnerField = fld(FxSymbolKeys.FLD_MENU_CONTRIB_OWNER),
+            menuContribBgLightField = fld(FxSymbolKeys.FLD_MENU_CONTRIB_BG_LIGHT),
+            menuContribPopulateMethod = mtd(FxSymbolKeys.MTD_MENU_CONTRIB_POPULATE),
+            menuModelAddItemMethod = mtd(FxSymbolKeys.MTD_MENU_MODEL_ADD_ITEM),
+            menuModelSizeMethod = mtd(FxSymbolKeys.MTD_MENU_MODEL_SIZE),
+            menuModelItemMethod = mtd(FxSymbolKeys.MTD_MENU_MODEL_ITEM),
+            menuModelItemsListField = fld(FxSymbolKeys.FLD_MENU_MODEL_ITEMS_LIST),
+            menuItemGetTitleMethod = mtd(FxSymbolKeys.MTD_MENU_ITEM_GET_TITLE),
+            menuDividerClass = menuDividerClass,
+            menuDividerCtor = menuDividerCtor,
+            menuActionCtor = ctor(FxSymbolKeys.CTR_MENU_ACTION),
+            menuClickListenerInterface = cls(FxSymbolKeys.CLS_MENU_CLICK_LISTENER),
+            actionIconsCreateMethod = mtd(FxSymbolKeys.MTD_ACTION_ICONS_CREATE)
+        )
+
+        val googleDrive = GoogleDriveBindings(
+            authActivityOnCreate = mtd(FxSymbolKeys.MTD_GDRIVE_AUTH_ON_CREATE)
+                ?: declaredMethod(gdriveAuthClass, "onCreate", android.os.Bundle::class.java),
+            getClientId9012 = mtd(FxSymbolKeys.MTD_GDRIVE_GET_CLIENT_ID_9012),
+            tokenCredsCtor9012 = ctor(FxSymbolKeys.CTR_GDRIVE_TOKEN_CREDS_9012),
+            authReqBuilderCtor9108 = ctor(FxSymbolKeys.CTR_GDRIVE_AUTH_REQ_9108),
+            authReqClientIdField9108 = fld(FxSymbolKeys.FLD_GDRIVE_AUTH_REQ_CLIENT_ID_9108),
+            tokenCredsCtor9108 = ctor(FxSymbolKeys.CTR_GDRIVE_TOKEN_CREDS_9108),
+            tokenCredsClientIdField9108 = fld(FxSymbolKeys.FLD_GDRIVE_TOKEN_CREDS_CLIENT_ID_9108),
+            tokenCredsClientSecretField9108 = fld(FxSymbolKeys.FLD_GDRIVE_TOKEN_CREDS_SECRET_9108)
+        )
+
+        val hardwareRender = HardwareRenderBindings(
+            touchClass = touchClass,
+            setImageBitmap = mtd(FxSymbolKeys.MTD_HW_SET_IMAGE_BITMAP)
+                ?: declaredMethod(touchClass, "setImageBitmap", Bitmap::class.java),
+            setImageMovie = mtd(FxSymbolKeys.MTD_HW_SET_IMAGE_MOVIE)
+                ?: declaredMethod(touchClass, "setImageMovie", Movie::class.java),
+            setImageNull = mtd(FxSymbolKeys.MTD_HW_SET_IMAGE_NULL)
+                ?: declaredMethod(touchClass, "setImageNull"),
+            setPrescale = mtd(FxSymbolKeys.MTD_HW_SET_PRESCALE)
+                ?: declaredMethod(touchClass, "setPrescale", Float::class.javaPrimitiveType),
+            setTouchEnabled = mtd(FxSymbolKeys.MTD_HW_SET_TOUCH_ENABLED)
+                ?: declaredMethod(touchClass, "setTouchEnabled", Boolean::class.javaPrimitiveType),
+            zoomFit = mtd(FxSymbolKeys.MTD_HW_ZOOM_FIT)
+                ?: declaredMethod(touchClass, "zoomFit"),
+            onDraw = mtd(FxSymbolKeys.MTD_HW_ON_DRAW)
+                ?: declaredMethod(touchClass, "onDraw", Canvas::class.java),
+            onDetachedFromWindow = mtd(FxSymbolKeys.MTD_HW_ON_DETACHED)
+                ?: declaredMethod(touchClass, "onDetachedFromWindow"),
+            updateBoundsMethod = mtd(FxSymbolKeys.MTD_HW_UPDATE_BOUNDS),
+            enforceLayerOnBitmapMethod = mtd(FxSymbolKeys.MTD_HW_ENFORCE_LAYER),
+            bitmapField = fld(FxSymbolKeys.FLD_HW_BITMAP)
+                ?: touchClass?.declaredFields?.singleOrNull { it.type == Bitmap::class.java }?.apply { isAccessible = true },
+            movieField = fld(FxSymbolKeys.FLD_HW_MOVIE)
+                ?: touchClass?.declaredFields?.singleOrNull { it.type == Movie::class.java }?.apply { isAccessible = true },
+            moviePlayingField = fld(FxSymbolKeys.FLD_HW_MOVIE_PLAYING),
+            movieThreadField = fld(FxSymbolKeys.FLD_HW_MOVIE_THREAD)
+                ?: touchClass?.declaredFields?.singleOrNull { it.type == Thread::class.java }?.apply { isAccessible = true },
+            matrixField = fld(FxSymbolKeys.FLD_HW_MATRIX)
+                ?: touchClass?.declaredFields?.singleOrNull { it.type == Matrix::class.java }?.apply { isAccessible = true },
+            paintField = fld(FxSymbolKeys.FLD_HW_PAINT),
+            cropArField = fld(FxSymbolKeys.FLD_HW_CROP_AR),
+            cropRectField = fld(FxSymbolKeys.FLD_HW_CROP_RECT)
+                ?: touchClass?.declaredFields?.singleOrNull { it.type == Rect::class.java }?.apply { isAccessible = true },
+            softwareLayerFlagField = fld(FxSymbolKeys.FLD_HW_SOFTWARE_LAYER),
+            displaySizeField = fld(FxSymbolKeys.FLD_HW_DISPLAY_SIZE),
+            displaySizeWidthField = fld(FxSymbolKeys.FLD_DIM_WIDTH),
+            displaySizeHeightField = fld(FxSymbolKeys.FLD_DIM_HEIGHT),
+            needsZoomFitField = fld(FxSymbolKeys.FLD_HW_NEEDS_ZOOM_FIT),
+            imageDisplayClass = imageDisplayClass,
+            deliverBitmapMethod = mtd(FxSymbolKeys.MTD_HW_DELIVER_BITMAP),
+            deliverMovieMethod = mtd(FxSymbolKeys.MTD_HW_DELIVER_MOVIE),
+            clearDisplayMethod = mtd(FxSymbolKeys.MTD_HW_CLEAR_DISPLAY),
+            displayBitmapField = fld(FxSymbolKeys.FLD_HW_DISPLAY_BITMAP)
+                ?: imageDisplayClass?.declaredFields?.singleOrNull { it.type == Bitmap::class.java }?.apply { isAccessible = true },
+            displayMovieField = fld(FxSymbolKeys.FLD_HW_DISPLAY_MOVIE)
+                ?: imageDisplayClass?.declaredFields?.singleOrNull { it.type == Movie::class.java }?.apply { isAccessible = true },
+            displayDisposedField = fld(FxSymbolKeys.FLD_HW_DISPLAY_DISPOSED),
+            displayFullLoadedField = fld(FxSymbolKeys.FLD_HW_DISPLAY_FULL_LOADED),
+            displayPreviewLoadedField = fld(FxSymbolKeys.FLD_HW_DISPLAY_PREVIEW_LOADED),
+            viewerClass = viewerClass,
+            loadMediaMethod = mtd(FxSymbolKeys.MTD_VIEWER_LOAD_MEDIA)
+                ?: mtd(FxSymbolKeys.MTD_VIEWER_LOAD_MEDIA_AND_BITMAP),
+            loadGifMethod = mtd(FxSymbolKeys.MTD_VIEWER_LOAD_GIF),
+            applyBitmapResultMethod = mtd(FxSymbolKeys.MTD_HW_APPLY_BITMAP_RESULT),
+            imageResultCtor = ctor(FxSymbolKeys.CTR_HW_IMAGE_RESULT),
+            loadTokenField = fld(FxSymbolKeys.FLD_HW_LOAD_TOKEN),
+            isGifField = fld(FxSymbolKeys.FLD_HW_IS_GIF),
+            currentHolderField = fld(FxSymbolKeys.FLD_VIEWER_CURRENT_HOLDER),
+            enterTransitionField = fld(FxSymbolKeys.FLD_HW_ENTER_TRANSITION),
+            transitionBgViewField = fld(FxSymbolKeys.FLD_HW_TRANSITION_BG_VIEW),
+            transitionTopBarField = fld(FxSymbolKeys.FLD_HW_TRANSITION_TOP_BAR),
+            transitionBottomBarField = fld(FxSymbolKeys.FLD_HW_TRANSITION_BOTTOM_BAR),
+            transitionRunningField = fld(FxSymbolKeys.FLD_HW_TRANSITION_RUNNING),
+            transitionDoneField = fld(FxSymbolKeys.FLD_HW_TRANSITION_DONE),
+            uiHandlerField = fld(FxSymbolKeys.FLD_VIEWER_SUPPORT_HANDLER),
+            holderFileItemField = fld(FxSymbolKeys.FLD_ITEM_HOLDER_FILE_ITEM),
+            holderUriField = fld(FxSymbolKeys.FLD_ITEM_HOLDER_URI),
+            gifAnimatedCheckMethod = mtd(FxSymbolKeys.MTD_HW_GIF_ANIMATED_CHECK),
+            localPathClass = cls(FxSymbolKeys.CLS_LOCAL_PATH_CLASS),
+            localPathMethod = mtd(FxSymbolKeys.MTD_HW_LOCAL_PATH)
+        )
+
+        return ResolvedSymbols(
+            profile = FxProfile.DEXKIT_DYNAMIC,
+            versionCode = versionCode,
+            classLoader = cl,
+            sibling = sibling,
+            viewer = viewer,
+            remoteThumb = remoteThumb,
+            settings = settings,
+            androidData = androidData,
+            bonusLimits = bonusLimits,
+            folderLifecycle = folderLifecycle,
+            homeMenu = homeMenu,
+            googleDrive = googleDrive,
+            hardwareRender = hardwareRender,
+            symbolResolutionSource = source
+        )
     }
 
     private fun resolve9012(cl: ClassLoader, versionCode: Long): ResolvedSymbols {
@@ -1208,6 +1792,7 @@ object FxSymbolResolver {
             displayCommitMethod = null,
             siblingCallbackClass = siblingCbImplClass,
             siblingCallbackLoadedMethod = declaredMethod(siblingCbImplClass, "a", java.lang.reflect.Array.newInstance(fileItemClass ?: Any::class.java, 0)::class.java, Int::class.javaPrimitiveType),
+            siblingCallbackFailMethod = declaredMethod(siblingCbImplClass, "b"),
             siblingCallbackActivityField = declaredField(siblingCbImplClass, "b"),
             displayListenerClass = displayListenerClass,
             displayListenerRequestMethod = declaredMethod(displayListenerClass, "a", imageDisplayClass, Int::class.javaPrimitiveType),
@@ -1247,11 +1832,15 @@ object FxSymbolResolver {
             viewerDecodeItem = declaredMethod(viewerClass, "d2", Context::class.java, fileItemClass, Int::class.javaPrimitiveType),
             viewerStreamProviderRead = null,
             viewerStreamProviderItemField = null,
+            viewerOpenStreamMethod = declaredMethod(viewerBaseClass, "W"),
+            taskThreadCtor = declaredConstructor(loadClass(cl, "i9.e"), Class::class.java, String::class.java, Runnable::class.java),
+            viewerProgressBarField = declaredField(viewerClass, "R5"),
             remoteItemClasses = remoteItemClasses
         )
 
         val thumbRouterClass = loadClass(cl, "dd.h")
         val thumbCallbackClass = loadClass(cl, "dd.l")
+        val thumbCallbackPayloadClass = loadClass(cl, "dd.f")
         val thumbCacheClass = loadClass(cl, "dd.c")
         val thumbBaseClass = loadClass(cl, "dd.b")
         val remoteThumbTaskClass = loadClass(cl, "dd.d")
@@ -1266,6 +1855,7 @@ object FxSymbolResolver {
         val remoteThumb = RemoteThumbBindings(
             loadThumbnail = declaredMethod(thumbRouterClass, "b", Context::class.java, fileItemBaseClass, Int::class.javaPrimitiveType, thumbCallbackClass, thumbCacheClass, Boolean::class.javaPrimitiveType),
             thumbCallbackClass = thumbCallbackClass,
+            thumbCallbackEnqueueMethod = declaredMethod(thumbCallbackClass, "a", thumbCallbackPayloadClass),
             thumbTaskItemField = declaredField(thumbBaseClass, "c"),
             thumbTaskContextField = declaredField(thumbBaseClass, "d"),
             thumbTaskGetCacheFile = declaredMethod(thumbBaseClass, "d", Context::class.java, fileItemClass, String::class.java, String::class.java),
@@ -1289,6 +1879,8 @@ object FxSymbolResolver {
             thumbGeneratorExceedsCap = declaredMethod(thumbGenClass, "k", imgDimClass),
             thumbGeneratorGenerate = declaredMethod(thumbGenClass, "c", thumbStreamSrcClass, java.io.File::class.java, String::class.java),
             thumbGeneratorClass = thumbGenClass,
+            dimWidthField = declaredField(imgDimClass, "f"),
+            dimHeightField = declaredField(imgDimClass, "i"),
             settingsGetInstance = declaredMethod(settingsClass, "d", Context::class.java),
             settingsThumbsEnabled = declaredMethod(settingsClass, "v1"),
             settingsThumbsForPath = declaredMethod(settingsClass, "w1", String::class.java),
@@ -1503,6 +2095,79 @@ object FxSymbolResolver {
             tokenCredsClientSecretField9108 = null
         )
 
+        val touchClass = loadClass(cl, "nextapp.maui.ui.imageview.TouchImageDisplay")
+        val transitionClass = loadClass(cl, "nextapp.fx.ui.viewer.image.f0")
+        val gifProbeClass = loadClass(cl, "a9.e")
+        val localInterface = loadClass(cl, "ue.a0")
+        val localPathProvider = loadClass(cl, "ue.b0")
+
+        val hardwareRender = HardwareRenderBindings(
+            touchClass = touchClass,
+            setImageBitmap = declaredMethod(touchClass, "setImageBitmap", Bitmap::class.java),
+            setImageMovie = declaredMethod(touchClass, "setImageMovie", Movie::class.java),
+            setImageNull = declaredMethod(touchClass, "setImageNull"),
+            setPrescale = declaredMethod(touchClass, "setPrescale", Float::class.javaPrimitiveType),
+            setTouchEnabled = declaredMethod(touchClass, "setTouchEnabled", Boolean::class.javaPrimitiveType),
+            zoomFit = declaredMethod(touchClass, "zoomFit"),
+            onDraw = declaredMethod(touchClass, "onDraw", Canvas::class.java),
+            onDetachedFromWindow = declaredMethod(touchClass, "onDetachedFromWindow"),
+            updateBoundsMethod = declaredMethod(
+                touchClass,
+                "w",
+                Int::class.javaPrimitiveType,
+                Int::class.javaPrimitiveType,
+                Boolean::class.javaPrimitiveType
+            ),
+            enforceLayerOnBitmapMethod = declaredMethod(touchClass, "g", Bitmap::class.java),
+            bitmapField = declaredField(touchClass, "Q5"),
+            movieField = declaredField(touchClass, "R5"),
+            moviePlayingField = declaredField(touchClass, "S5"),
+            movieThreadField = declaredField(touchClass, "f"),
+            matrixField = declaredField(touchClass, "V5"),
+            paintField = declaredField(touchClass, "H5"),
+            cropArField = declaredField(touchClass, "f5"),
+            cropRectField = declaredField(touchClass, "c5"),
+            softwareLayerFlagField = declaredField(touchClass, "h5"),
+            displaySizeField = declaredField(touchClass, "k5"),
+            displaySizeWidthField = remoteThumb.dimWidthField,
+            displaySizeHeightField = remoteThumb.dimHeightField,
+            needsZoomFitField = declaredField(touchClass, "l5"),
+            imageDisplayClass = imageDisplayClass,
+            deliverBitmapMethod = declaredMethod(
+                imageDisplayClass,
+                "U",
+                Bitmap::class.java,
+                Boolean::class.javaPrimitiveType
+            ),
+            deliverMovieMethod = declaredMethod(imageDisplayClass, "V", Movie::class.java),
+            clearDisplayMethod = declaredMethod(imageDisplayClass, "W"),
+            displayBitmapField = declaredField(imageDisplayClass, "a6"),
+            displayMovieField = declaredField(imageDisplayClass, "b6"),
+            displayDisposedField = declaredField(imageDisplayClass, "f6"),
+            displayFullLoadedField = declaredField(imageDisplayClass, "g6"),
+            displayPreviewLoadedField = declaredField(imageDisplayClass, "h6"),
+            viewerClass = viewerClass,
+            loadMediaMethod = viewer.viewerLoadMedia,
+            loadGifMethod = viewer.viewerLoadGif,
+            applyBitmapResultMethod = null,
+            imageResultCtor = null,
+            loadTokenField = declaredField(viewerClass, "x5"),
+            isGifField = declaredField(viewerClass, "P5"),
+            currentHolderField = sibling.viewerCurrentHolderField,
+            enterTransitionField = declaredField(viewerClass, "y5"),
+            transitionBgViewField = declaredField(transitionClass, "c"),
+            transitionTopBarField = declaredField(transitionClass, "d"),
+            transitionBottomBarField = declaredField(transitionClass, "e"),
+            transitionRunningField = declaredField(transitionClass, "h"),
+            transitionDoneField = declaredField(transitionClass, "g"),
+            uiHandlerField = bonusLimits.viewerSupportHandlerField,
+            holderFileItemField = sibling.itemHolderFileItemField,
+            holderUriField = sibling.itemHolderUriField,
+            gifAnimatedCheckMethod = declaredMethod(gifProbeClass, "a", InputStream::class.java),
+            localPathClass = localInterface,
+            localPathMethod = declaredMethod(localPathProvider, "h")
+        )
+
         return ResolvedSymbols(
             profile = FxProfile.FX_9012,
             versionCode = versionCode,
@@ -1515,7 +2180,9 @@ object FxSymbolResolver {
             bonusLimits = bonusLimits,
             folderLifecycle = folderLifecycle,
             homeMenu = homeMenu,
-            googleDrive = googleDrive
+            googleDrive = googleDrive,
+            hardwareRender = hardwareRender,
+            symbolResolutionSource = "static:9012"
         )
     }
 
@@ -1615,11 +2282,15 @@ object FxSymbolResolver {
             viewerDecodeItem = declaredMethod(viewerClass, "I", viewerClass, fileItemClass, Int::class.javaPrimitiveType),
             viewerStreamProviderRead = declaredMethod(streamProviderClass, "read"),
             viewerStreamProviderItemField = declaredField(streamProviderClass, "i"),
+            viewerOpenStreamMethod = declaredMethod(viewerBaseClass, "w"),
+            taskThreadCtor = declaredConstructor(loadClass(cl, "bb.d"), Class::class.java, String::class.java, Runnable::class.java),
+            viewerProgressBarField = declaredField(viewerClass, "N2"),
             remoteItemClasses = remoteItemClasses
         )
 
         val thumbRouterClass = loadClass(cl, "wg.e")
         val thumbCallbackClass = loadClass(cl, "kf.k")
+        val thumbCallbackPayloadClass = loadClass(cl, "kf.f")
         val thumbCacheClass = loadClass(cl, "kf.d")
         val thumbBaseClass = loadClass(cl, "kf.b")
         val remoteThumbTaskClass = loadClass(cl, "kf.e")
@@ -1627,6 +2298,7 @@ object FxSymbolResolver {
         val thumbGenClass = loadClass(cl, "pc.c")
         val thumbStreamSrcClass = loadClass(cl, "db.d")
         val thumbInfoClass = loadClass(cl, "nc.j")
+        val imgDimClass = loadClass(cl, "pa.c")
         val settingsClass = loadClass(cl, "mb.l")
         val dropboxClass = loadClass(cl, "ad.c")
         val resultBoxClass = loadClass(cl, "a4.c")
@@ -1634,6 +2306,7 @@ object FxSymbolResolver {
         val remoteThumb = RemoteThumbBindings(
             loadThumbnail = declaredMethod(thumbRouterClass, "j", Context::class.java, fileItemBaseClass, Int::class.javaPrimitiveType, thumbCallbackClass, thumbCacheClass, Boolean::class.javaPrimitiveType),
             thumbCallbackClass = thumbCallbackClass,
+            thumbCallbackEnqueueMethod = declaredMethod(thumbCallbackClass, "a", thumbCallbackPayloadClass),
             thumbTaskItemField = declaredField(thumbBaseClass, "c"),
             thumbTaskContextField = declaredField(thumbBaseClass, "d"),
             thumbTaskGetCacheFile = declaredMethod(thumbBaseClass, "c", Context::class.java, fileItemClass, String::class.java, String::class.java),
@@ -1656,6 +2329,8 @@ object FxSymbolResolver {
             thumbGeneratorExceedsCap = null,
             thumbGeneratorGenerate = declaredMethod(thumbGenClass, "a"),
             thumbGeneratorClass = thumbGenClass,
+            dimWidthField = declaredField(imgDimClass, "f"),
+            dimHeightField = declaredField(imgDimClass, "i"),
             settingsGetInstance = declaredMethod(settingsClass, "d", Context::class.java),
             settingsThumbsEnabled = declaredMethod(settingsClass, "u"),
             settingsThumbsForPath = declaredMethod(settingsClass, "v", String::class.java),
@@ -1876,6 +2551,87 @@ object FxSymbolResolver {
             tokenCredsClientSecretField9108 = declaredField(tokenCredsClass, "b")
         )
 
+        val touchClass = loadClass(cl, "nextapp.maui.ui.imageview.TouchImageDisplay")
+        val imageResultClass = loadClass(cl, "ua.a")
+        val transitionClass = loadClass(cl, "nextapp.fx.ui.viewer.image.u")
+        val gifProbeClass = loadClass(cl, "ua.b")
+        val localInterface = loadClass(cl, "kh.c0")
+        val localPathProvider = loadClass(cl, "kh.d0")
+
+        val hardwareRender = HardwareRenderBindings(
+            touchClass = touchClass,
+            setImageBitmap = declaredMethod(touchClass, "setImageBitmap", Bitmap::class.java),
+            setImageMovie = declaredMethod(touchClass, "setImageMovie", Movie::class.java),
+            setImageNull = declaredMethod(touchClass, "setImageNull"),
+            setPrescale = declaredMethod(touchClass, "setPrescale", Float::class.javaPrimitiveType),
+            setTouchEnabled = declaredMethod(touchClass, "setTouchEnabled", Boolean::class.javaPrimitiveType),
+            zoomFit = declaredMethod(touchClass, "zoomFit"),
+            onDraw = declaredMethod(touchClass, "onDraw", Canvas::class.java),
+            onDetachedFromWindow = declaredMethod(touchClass, "onDetachedFromWindow"),
+            updateBoundsMethod = declaredMethod(
+                touchClass,
+                "h",
+                Int::class.javaPrimitiveType,
+                Int::class.javaPrimitiveType,
+                Boolean::class.javaPrimitiveType
+            ),
+            enforceLayerOnBitmapMethod = null,
+            bitmapField = declaredField(touchClass, "N2"),
+            movieField = declaredField(touchClass, "O2"),
+            moviePlayingField = declaredField(touchClass, "P2"),
+            movieThreadField = declaredField(touchClass, "f"),
+            matrixField = declaredField(touchClass, "S2"),
+            paintField = declaredField(touchClass, "E2"),
+            cropArField = declaredField(touchClass, "c2"),
+            cropRectField = declaredField(touchClass, "Z1"),
+            softwareLayerFlagField = declaredField(touchClass, "e2"),
+            displaySizeField = declaredField(touchClass, "h2"),
+            displaySizeWidthField = remoteThumb.dimWidthField,
+            displaySizeHeightField = remoteThumb.dimHeightField,
+            needsZoomFitField = declaredField(touchClass, "i2"),
+            imageDisplayClass = imageDisplayClass,
+            deliverBitmapMethod = null,
+            deliverMovieMethod = null,
+            clearDisplayMethod = declaredMethod(imageDisplayClass, "l"),
+            displayBitmapField = declaredField(imageDisplayClass, "W2"),
+            displayMovieField = declaredField(imageDisplayClass, "X2"),
+            displayDisposedField = declaredField(imageDisplayClass, "b3"),
+            displayFullLoadedField = declaredField(imageDisplayClass, "c3"),
+            displayPreviewLoadedField = declaredField(imageDisplayClass, "d3"),
+            viewerClass = viewerClass,
+            loadMediaMethod = viewer.viewerLoadMediaAndBitmap,
+            loadGifMethod = null,
+            applyBitmapResultMethod = declaredMethod(
+                viewerClass,
+                "F",
+                imageDisplayClass,
+                itemHolderClass,
+                imageResultClass,
+                Boolean::class.javaPrimitiveType
+            ),
+            imageResultCtor = declaredConstructor(
+                imageResultClass,
+                Bitmap::class.java,
+                Float::class.javaPrimitiveType,
+                Boolean::class.javaPrimitiveType
+            ),
+            loadTokenField = declaredField(viewerClass, "t2"),
+            isGifField = declaredField(viewerClass, "L2"),
+            currentHolderField = sibling.viewerCurrentHolderField,
+            enterTransitionField = declaredField(viewerClass, "u2"),
+            transitionBgViewField = declaredField(transitionClass, "c"),
+            transitionTopBarField = declaredField(transitionClass, "d"),
+            transitionBottomBarField = declaredField(transitionClass, "e"),
+            transitionRunningField = declaredField(transitionClass, "h"),
+            transitionDoneField = declaredField(transitionClass, "g"),
+            uiHandlerField = bonusLimits.viewerSupportHandlerField,
+            holderFileItemField = sibling.itemHolderFileItemField,
+            holderUriField = sibling.itemHolderUriField,
+            gifAnimatedCheckMethod = declaredMethod(gifProbeClass, "f", InputStream::class.java),
+            localPathClass = localInterface,
+            localPathMethod = declaredMethod(localPathProvider, "d")
+        )
+
         return ResolvedSymbols(
             profile = FxProfile.FX_9108,
             versionCode = versionCode,
@@ -1888,7 +2644,9 @@ object FxSymbolResolver {
             bonusLimits = bonusLimits,
             folderLifecycle = folderLifecycle,
             homeMenu = homeMenu,
-            googleDrive = googleDrive
+            googleDrive = googleDrive,
+            hardwareRender = hardwareRender,
+            symbolResolutionSource = "static:9108"
         )
     }
 
@@ -1956,6 +2714,10 @@ object FxSymbolResolver {
             runnerCallbackHolderField = null, itemHolderFileItemField = null, itemHolderUriField = null
         )
 
+        val viewerProgressBarField = viewerClass?.declaredFields
+            ?.singleOrNull { it.type == ProgressBar::class.java }
+            ?.apply { isAccessible = true }
+
         val viewer = ViewerPrefetchBindings(
             viewerBaseClass = viewerClass?.superclass,
             mirrorRemoteTempFile = null,
@@ -1964,6 +2726,8 @@ object FxSymbolResolver {
             viewerLoadMediaAndBitmap = null, viewerLoadMedia = null, viewerLoadBitmap = null,
             viewerLoadGif = null, viewerOpenItemStream = null, viewerDecodeItem = null,
             viewerStreamProviderRead = null, viewerStreamProviderItemField = null,
+            viewerOpenStreamMethod = null, taskThreadCtor = null,
+            viewerProgressBarField = viewerProgressBarField,
             remoteItemClasses = emptyList()
         )
 
@@ -2061,6 +2825,70 @@ object FxSymbolResolver {
             tokenCredsClientSecretField9108 = null
         )
 
+        val touchClass = loadClass(cl, "nextapp.maui.ui.imageview.TouchImageDisplay")
+        val bitmapField = touchClass?.declaredFields?.filter { it.type == Bitmap::class.java }
+            ?.singleOrNull()?.apply { isAccessible = true }
+        val matrixField = touchClass?.declaredFields?.filter { it.type == Matrix::class.java }
+            ?.singleOrNull()?.apply { isAccessible = true }
+        val rectField = touchClass?.declaredFields?.filter { it.type == Rect::class.java }
+            ?.singleOrNull()?.apply { isAccessible = true }
+
+        val hardwareRender = HardwareRenderBindings(
+            touchClass = touchClass,
+            setImageBitmap = declaredMethod(touchClass, "setImageBitmap", Bitmap::class.java),
+            setImageMovie = declaredMethod(touchClass, "setImageMovie", Movie::class.java),
+            setImageNull = declaredMethod(touchClass, "setImageNull"),
+            setPrescale = declaredMethod(touchClass, "setPrescale", Float::class.javaPrimitiveType),
+            setTouchEnabled = declaredMethod(touchClass, "setTouchEnabled", Boolean::class.javaPrimitiveType),
+            zoomFit = declaredMethod(touchClass, "zoomFit"),
+            onDraw = declaredMethod(touchClass, "onDraw", Canvas::class.java),
+            onDetachedFromWindow = declaredMethod(touchClass, "onDetachedFromWindow"),
+            updateBoundsMethod = null,
+            enforceLayerOnBitmapMethod = null,
+            bitmapField = bitmapField,
+            movieField = null,
+            moviePlayingField = null,
+            movieThreadField = null,
+            matrixField = matrixField,
+            paintField = null,
+            cropArField = null,
+            cropRectField = rectField,
+            softwareLayerFlagField = null,
+            displaySizeField = null,
+            displaySizeWidthField = null,
+            displaySizeHeightField = null,
+            needsZoomFitField = null,
+            imageDisplayClass = sibling.imageDisplayClass,
+            deliverBitmapMethod = null,
+            deliverMovieMethod = null,
+            clearDisplayMethod = null,
+            displayBitmapField = null,
+            displayMovieField = null,
+            displayDisposedField = null,
+            displayFullLoadedField = null,
+            displayPreviewLoadedField = null,
+            viewerClass = viewerClass,
+            loadMediaMethod = null,
+            loadGifMethod = null,
+            applyBitmapResultMethod = null,
+            imageResultCtor = null,
+            loadTokenField = null,
+            isGifField = null,
+            currentHolderField = null,
+            enterTransitionField = null,
+            transitionBgViewField = null,
+            transitionTopBarField = null,
+            transitionBottomBarField = null,
+            transitionRunningField = null,
+            transitionDoneField = null,
+            uiHandlerField = null,
+            holderFileItemField = null,
+            holderUriField = null,
+            gifAnimatedCheckMethod = null,
+            localPathClass = null,
+            localPathMethod = null
+        )
+
         return ResolvedSymbols(
             profile = FxProfile.STRUCTURAL_FALLBACK,
             versionCode = versionCode,
@@ -2073,7 +2901,9 @@ object FxSymbolResolver {
             bonusLimits = bonusLimits,
             folderLifecycle = folderLifecycle,
             homeMenu = homeMenu,
-            googleDrive = googleDrive
+            googleDrive = googleDrive,
+            hardwareRender = hardwareRender,
+            symbolResolutionSource = "fallback"
         )
     }
 

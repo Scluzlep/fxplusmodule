@@ -114,10 +114,11 @@ object GoogleDriveOAuthHook {
             result
         }
 
-        when (symbols.profile) {
-            FxProfile.FX_9012 -> install9012(gd, installer)
-            FxProfile.FX_9108 -> install9108(gd, installer)
-            FxProfile.STRUCTURAL_FALLBACK -> Unit
+        if (gd.getClientId9012 != null || gd.tokenCredsCtor9012 != null) {
+            install9012(gd, installer)
+        }
+        if (gd.authReqBuilderCtor9108 != null || gd.tokenCredsCtor9108 != null) {
+            install9108(gd, installer)
         }
     }
 
@@ -161,7 +162,7 @@ object GoogleDriveOAuthHook {
                 runCatching {
                     gd.authReqClientIdField9108?.set(instance, customId)
                 }.onFailure { err ->
-                    installer.logWarn("Failed to override gg.d.a client_id", err)
+                    installer.logWarn("Failed to override authReqBuilder client_id", err)
                 }
             }
             result

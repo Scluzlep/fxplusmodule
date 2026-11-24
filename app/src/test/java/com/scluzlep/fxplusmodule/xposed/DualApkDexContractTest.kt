@@ -1,5 +1,6 @@
 package com.scluzlep.fxplusmodule.xposed
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
@@ -124,6 +125,261 @@ class DualApkDexContractTest {
         assertTrue(c9108.fields.any { it.className == "jh.b" && it.fieldName == "b" })
     }
 
+    @Test
+    fun verifyDexKitInvariantAnchorsAgainstBothRealApks() {
+        val apk9012 = resolveRepoRelativeFile("../apk/base.apk")
+        val apk9108 = resolveRepoRelativeFile("../FX Explorer_v9.1.0.8_9108.apk")
+        assumeTrue("FX 9012 APK missing at ${apk9012.absolutePath}; skipping in CI", apk9012.isFile)
+        assumeTrue("FX 9108 APK missing at ${apk9108.absolutePath}; skipping in CI", apk9108.isFile)
+
+        verifyDexKitAnchorsForApk(apk9012, label = "9012")
+        verifyDexKitAnchorsForApk(apk9108, label = "9108")
+    }
+
+    @Test
+    fun verifyDalvikCodeInspectorExtractsExact9012And9108Bindings() {
+        val apk9012 = resolveRepoRelativeFile("../apk/base.apk")
+        val apk9108 = resolveRepoRelativeFile("../FX Explorer_v9.1.0.8_9108.apk")
+        assumeTrue("FX 9012 APK missing at ${apk9012.absolutePath}; skipping in CI", apk9012.isFile)
+        assumeTrue("FX 9108 APK missing at ${apk9108.absolutePath}; skipping in CI", apk9108.isFile)
+
+        // 9012 checks
+        val inspector9012 = DalvikCodeInspector.fromApkFiles(listOf(apk9012))
+            ?: error("DalvikCodeInspector failed to load 9012 APK")
+        val enums9012 = inspector9012.findStaticEnumFieldsByString("Lnextapp/fx/ui/res/m\$a;-><clinit>()V")
+        assertTrue("9012 enum missing windowBackground", enums9012.containsKey("windowBackground"))
+        val boxBg9012 = enums9012["boxBackground"] ?: error("9012 enum missing boxBackground")
+        val boxPressed9012 = enums9012["boxPressedBackground"] ?: error("9012 enum missing boxPressedBackground")
+        val theme9012 = inspector9012.findUiThemeFieldMapping(
+            ctorMethodDesc = "Lxc/f;-><init>(Landroid/content/Context;Lu9/h;)V",
+            boxBgEnumDesc = boxBg9012,
+            boxPressedEnumDesc = boxPressed9012
+        ) ?: error("9012 xc.f.<init> mapping null")
+        assertEquals("Lxc/f;->x:I", theme9012.boxBgFieldDesc)
+        assertEquals("Lxc/f;->y:I", theme9012.boxPressedBgFieldDesc)
+        assertEquals("Lxc/f;->l:I", theme9012.textPrimaryFieldDesc)
+        assertEquals("Lxc/f;->k:I", theme9012.textSecondaryFieldDesc)
+
+        // 9108 checks
+        val inspector9108 = DalvikCodeInspector.fromApkFiles(listOf(apk9108))
+            ?: error("DalvikCodeInspector failed to load 9108 APK")
+        val enums9108 = inspector9108.findStaticEnumFieldsByString("Lfg/n;-><clinit>()V")
+        assertEquals("Lfg/n;->i:Lfg/n;", enums9108["windowBackground"])
+        val boxBg9108 = enums9108["boxBackground"] ?: error("9108 enum missing boxBackground")
+        val boxPressed9108 = enums9108["boxPressedBackground"] ?: error("9108 enum missing boxPressedBackground")
+        val theme9108 = inspector9108.findUiThemeFieldMapping(
+            ctorMethodDesc = "Lef/g;-><init>(Landroid/content/Context;Lmb/l;)V",
+            boxBgEnumDesc = boxBg9108,
+            boxPressedEnumDesc = boxPressed9108
+        ) ?: error("9108 ef.g.<init> mapping null")
+        assertEquals("Lef/g;->v:I", theme9108.boxBgFieldDesc)
+        assertEquals("Lef/g;->w:I", theme9108.boxPressedBgFieldDesc)
+        assertEquals("Lef/g;->l:I", theme9108.textPrimaryFieldDesc)
+        assertEquals("Lef/g;->k:I", theme9108.textSecondaryFieldDesc)
+
+        // Fix #3: 9108 viewer StreamProvider FileItem receiver
+        assertEquals(
+            "Lnextapp/fx/ui/viewer/image/c;->i:Ljava/lang/Object;",
+            inspector9108.findFieldReceiverForInvoke(
+                callerMethodDesc = "Lnextapp/fx/ui/viewer/image/c;->read()Ljava/io/InputStream;",
+                calleeMethodDesc = "Lkh/e;->f(Landroid/content/Context;)Ljava/io/InputStream;"
+            )
+        )
+
+        // Fix #7: 9108 HomeContentView.getMenuContributions() -> be.p(u, k, 14)
+        assertEquals(
+            14,
+            inspector9108.findIntArgPassedToInvoke(
+                callerMethodDesc = "Lnextapp/fx/ui/homecontent/HomeContentView;->getMenuContributions()Lnextapp/fx/ui/content/b0;",
+                calleeMethodDesc = "Lbe/p;-><init>(Lnextapp/fx/ui/content/u;Lnextapp/fx/ui/content/k;I)V",
+                invokeArgIndex = 3
+            )
+        )
+
+        // Fix #8: 9108 RemoteThumbTask kf.e.d() -> be.k0(kf.e, String, a4.c) case 2
+        val thumbCtorWrites = inspector9108.findConstructorParamFieldWrites(
+            "Lbe/k0;-><init>(Lkf/e;Ljava/lang/String;La4/c;)V"
+        ) ?: error("be.k0.<init> writes null")
+        assertEquals("Lbe/k0;->e2:Ljava/lang/Object;", thumbCtorWrites.paramToField[1])
+        assertEquals("Lbe/k0;->d2:Ljava/lang/Object;", thumbCtorWrites.paramToField[3])
+        assertEquals(2, thumbCtorWrites.intConstToField["Lbe/k0;->c2:I"])
+
+        // Fix #9: 9108 TextEdit reader caseId = 7 & ExecActivity worker/UI runnable caseIds (19 & 6)
+        assertEquals(
+            7,
+            inspector9108.findIntArgPassedToInvoke(
+                callerMethodDesc = "Lmg/n;->l(Ljava/io/InputStream;Ljava/lang/String;)Lk2/y;",
+                calleeMethodDesc = "Lk2/y;-><init>(Ljava/lang/Object;ILjava/lang/Object;)V",
+                invokeArgIndex = 2
+            )
+        )
+        assertEquals(
+            19,
+            inspector9108.findSwitchCaseReachingString(
+                methodDesc = "Lnextapp/fx/plus/ui/audio/w;->run()V",
+                targetString = "x/x-elf"
+            )
+        )
+        assertEquals(
+            listOf(18, 19),
+            inspector9108.findAllIntArgsPassedToInvoke(
+                callerMethodDesc = "Lpg/k;->run()V",
+                calleeMethodDesc = "Lnextapp/fx/plus/ui/audio/w;-><init>(Ljava/lang/Object;ILjava/lang/Object;)V",
+                invokeArgIndex = 2
+            ).sorted()
+        )
+        assertEquals(
+            "Lnextapp/fx/ui/viewer/TextViewerActivity;->z5:Z" to "Lnextapp/fx/ui/viewer/TextViewerActivity;->y5:Z",
+            inspector9012.findTextViewerUnsupportedAndTruncatedFields(
+                applyMethodDesc = "Lnextapp/fx/ui/viewer/TextViewerActivity;->u0()V",
+                textViewerClassDesc = "Lnextapp/fx/ui/viewer/TextViewerActivity;",
+                candidateFieldDescs = setOf(
+                    "Lnextapp/fx/ui/viewer/TextViewerActivity;->z5:Z",
+                    "Lnextapp/fx/ui/viewer/TextViewerActivity;->y5:Z"
+                )
+            )
+        )
+        assertEquals(
+            "Lnextapp/fx/ui/viewer/TextViewerActivity;->v2:Z" to "Lnextapp/fx/ui/viewer/TextViewerActivity;->u2:Z",
+            inspector9108.findTextViewerUnsupportedAndTruncatedFields(
+                applyMethodDesc = "Lpg/f0;->run()V",
+                textViewerClassDesc = "Lnextapp/fx/ui/viewer/TextViewerActivity;",
+                candidateFieldDescs = setOf(
+                    "Lnextapp/fx/ui/viewer/TextViewerActivity;->v2:Z",
+                    "Lnextapp/fx/ui/viewer/TextViewerActivity;->u2:Z"
+                )
+            )
+        )
+        assertEquals(
+            6,
+            inspector9108.findIntArgPassedToInvoke(
+                callerMethodDesc = "Lnextapp/fx/plus/ui/audio/w;->run()V",
+                calleeMethodDesc = "Lpg/k;-><init>(Lnextapp/fx/ui/viewer/ExecActivity;I)V",
+                invokeArgIndex = 2
+            )
+        )
+        val execWorkerWrites = inspector9108.findConstructorParamFieldWrites(
+            "Lnextapp/fx/plus/ui/audio/w;-><init>(Ljava/lang/Object;ILjava/lang/Object;)V"
+        ) ?: error("w.<init> writes null")
+        assertEquals("Lnextapp/fx/plus/ui/audio/w;->i:Ljava/lang/Object;", execWorkerWrites.paramToField[1])
+        assertEquals("Lnextapp/fx/plus/ui/audio/w;->f:I", execWorkerWrites.paramToField[2])
+        assertEquals("Lnextapp/fx/plus/ui/audio/w;->X:Ljava/lang/Object;", execWorkerWrites.paramToField[3])
+        assertEquals(
+            "Lnextapp/fx/plus/ui/audio/w;->i:Ljava/lang/Object;",
+            inspector9108.findFieldCastToType(
+                methodDesc = "Lnextapp/fx/plus/ui/audio/w;->run()V",
+                targetTypeDesc = "Lnextapp/fx/ui/viewer/ExecActivity;",
+                candidateFieldDescs = setOf(
+                    "Lnextapp/fx/plus/ui/audio/w;->i:Ljava/lang/Object;",
+                    "Lnextapp/fx/plus/ui/audio/w;->X:Ljava/lang/Object;"
+                )
+            )
+        )
+        assertEquals(
+            0,
+            inspector9108.findIntArgPassedToInvoke(
+                callerMethodDesc = "Lnextapp/fx/ui/viewer/TextViewerActivity;->onCreate(Landroid/os/Bundle;)V",
+                calleeMethodDesc = "Lpg/f0;-><init>(Lnextapp/fx/ui/viewer/TextViewerActivity;I)V",
+                invokeArgIndex = 2
+            )
+        )
+    }
+
+    private fun verifyDexKitAnchorsForApk(apkFile: File, label: String) {
+        val index = parseApkDexIndex(apkFile)
+        val errors = mutableListOf<String>()
+
+        val exactStrings = listOf(
+            "Failed to test if GIF is animated.",
+            "INTERNAL ERROR",
+            "action_filesystems",
+            "action_home_customize",
+            "action_theme",
+            "907044817113-8d3ccj149pvkhj2ru91scjaahpr8v1e1.apps.googleusercontent.com",
+            "https://accounts.google.com/o/oauth2/token",
+            "Network",
+            "Remote",
+            "image/",
+            "GeneratedRemoteItemThumbnail",
+            "fileViewImageThumbnails",
+            "trimColorAccent4",
+            "trimColorBase4",
+            "boxBackground",
+            "boxPressedBackground",
+            "windowBackground",
+            "x/x-android-binary-xml",
+            "x/x-elf",
+            "Out of memory attempting to display text file."
+        )
+        for (expected in exactStrings) {
+            if (expected !in index.dexStrings) {
+                errors += "[$label] Missing invariant DexKit exact string: \"$expected\""
+            }
+        }
+
+        val prefixStrings = listOf(
+            "Task Thread: ",
+            "ImageViewer: Unable to retrieve sibling files",
+            "Out of memory reading file, Line "
+        )
+        for (prefix in prefixStrings) {
+            if (index.dexStrings.none { it.startsWith(prefix) }) {
+                errors += "[$label] Missing invariant DexKit prefix string: \"$prefix\""
+            }
+        }
+
+        if (index.dexStrings.none { it.contains("EXCEEDED MAXIMUM LINE COUNT") }) {
+            errors += "[$label] Missing invariant DexKit substring: \"EXCEEDED MAXIMUM LINE COUNT\""
+        }
+
+        val anchorClasses = listOf(
+            "nextapp.fx.ui.viewer.image.ImageViewerActivity",
+            "nextapp.fx.ui.viewer.image.ImageDisplay",
+            "nextapp.maui.ui.imageview.TouchImageDisplay",
+            "nextapp.fx.dirimpl.file.FileCatalog",
+            "nextapp.xf.dir.DirectoryCatalog",
+            "nextapp.fx.dir.optionstore.DirectoryOptionStore",
+            "nextapp.fx.dir.optionstore.HiddenFileStore",
+            "nextapp.fx.ui.ExplorerActivity",
+            "nextapp.fx.ui.homecontent.HomeContentView",
+            "nextapp.fx.ui.res.ActionIcons",
+            "nextapp.fx.ui.fxsystem.MainPrefActivity",
+            "nextapp.maui.ui.preference.LabelPreference",
+            "nextapp.fx.plus.ui.net.cloud.GoogleDriveAuthActivity",
+            "nextapp.fx.ui.viewer.TextViewerActivity",
+            "nextapp.fx.ui.viewer.ExecActivity"
+        )
+        for (cls in anchorClasses) {
+            val desc = toDexDescriptor(cls)
+            if (desc !in index.definedClasses) {
+                errors += "[$label] Missing DexKit anchor class_def: $desc"
+            }
+        }
+
+        val taskThreadCtorKey = "<init>(Ljava/lang/Class;Ljava/lang/String;Ljava/lang/Runnable;)V"
+        val hasTaskThread = index.definedClasses.any { clsDesc ->
+            index.classSuperClasses[clsDesc] == "Ljava/lang/Thread;" &&
+                index.classMethods[clsDesc]?.containsKey(taskThreadCtorKey) == true
+        }
+        if (!hasTaskThread) {
+            errors += "[$label] Missing TaskThread subclass of Ljava/lang/Thread; with $taskThreadCtorKey"
+        }
+
+        val hasFxDialog = index.definedClasses.any { clsDesc ->
+            clsDesc.startsWith("Lnextapp/fx/ui/widget/") &&
+                index.classMethods[clsDesc]?.containsKey("getDefaultContentLayout()Landroid/widget/LinearLayout;") == true &&
+                index.classMethods[clsDesc]?.containsKey("isBackgroundLight()Z") == true
+        }
+        if (!hasFxDialog) {
+            errors += "[$label] Missing FX dialog class defining getDefaultContentLayout() and isBackgroundLight()"
+        }
+
+        assertTrue(
+            "DexKit invariant anchor failures for FX $label (${errors.size}):\n${errors.joinToString("\n")}",
+            errors.isEmpty()
+        )
+    }
+
     private fun resolveRepoRelativeFile(relFromRepoRoot: String): File {
         val direct = File(relFromRepoRoot)
         if (direct.isFile) return direct
@@ -193,6 +449,8 @@ class DualApkDexContractTest {
 
     private class DexIndex {
         val definedClasses = HashSet<String>(4096)
+        val dexStrings = HashSet<String>(16384)
+        val classSuperClasses = HashMap<String, String>(4096)
         val classMethods = HashMap<String, MutableMap<String, Int>>(4096)
         val classFields = HashMap<String, MutableMap<String, Int>>(4096)
     }
@@ -235,6 +493,7 @@ class DualApkDexContractTest {
             val strDataOff = buf.getInt(stringIdsOff + i * 4)
             readMutf8String(bytes, strDataOff)
         }
+        index.dexStrings.addAll(strings)
 
         val types = Array(typeIdsSize) { i ->
             val descriptorIdx = buf.getInt(typeIdsOff + i * 4)
@@ -274,9 +533,13 @@ class DualApkDexContractTest {
         for (c in 0 until classDefsSize) {
             val base = classDefsOff + c * 32
             val classIdx = buf.getInt(base)
+            val superclassIdx = buf.getInt(base + 8)
             val classDataOff = buf.getInt(base + 24)
             val classDesc = types[classIdx]
             index.definedClasses.add(classDesc)
+            if (superclassIdx in types.indices) {
+                index.classSuperClasses[classDesc] = types[superclassIdx]
+            }
 
             if (classDataOff == 0) continue
 

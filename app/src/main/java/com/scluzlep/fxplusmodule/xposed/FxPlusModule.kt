@@ -120,7 +120,19 @@ class FxPlusModule : XposedModule() {
         currentApp?.applicationContext?.let { attachHostContext(it) }
 
         val versionCode = FxSymbolResolver.detectVersionCode(currentApp, appInfo)
-        val symbols = FxSymbolResolver.resolve(classLoader, versionCode)
+        val symbols = FxSymbolResolver.resolve(
+            classLoader = classLoader,
+            versionCode = versionCode,
+            targetAppInfo = appInfo ?: currentApp?.applicationInfo,
+            moduleAppInfo = runCatching { moduleApplicationInfo }.getOrNull(),
+            onLog = { level, message, err ->
+                if (err != null) {
+                    log(level, TAG, message, err)
+                } else {
+                    log(level, TAG, message)
+                }
+            }
+        )
 
         val installer = object : FxHookInstaller {
             override fun install(id: String, executable: Executable?, hooker: XposedInterface.Hooker) {
@@ -192,7 +204,7 @@ class FxPlusModule : XposedModule() {
         log(
             Log.INFO,
             TAG,
-            "Installed FX Plus hooks profile=${symbols.profile} version=$versionCode handles=${activeHandles.size}"
+            "Installed FX Plus hooks profile=${symbols.profile} source=${symbols.symbolResolutionSource} version=$versionCode handles=${activeHandles.size}"
         )
     }
 

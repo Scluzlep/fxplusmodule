@@ -36,7 +36,7 @@ object AndroidDataAccessHook {
 
     fun install(symbols: ResolvedSymbols, installer: FxHookInstaller) {
         val ad = symbols.androidData
-        if (symbols.profile == FxProfile.STRUCTURAL_FALLBACK || ad.fileDirListChildren == null) {
+        if (ad.fileDirListChildren == null) {
             installer.logWarn("AndroidDataAccessHook skipped: missing FileCatalog bindings")
             return
         }
@@ -576,11 +576,8 @@ object AndroidDataAccessHook {
     ): Any? {
         val ad = symbols.androidData
         return runCatching {
-            when (symbols.profile) {
-                FxProfile.FX_9012 -> ad.fileDirCtor9012?.newInstance(catalog, fxPath, javaFile)
-                FxProfile.FX_9108 -> ad.fileCatalogOpenDir?.invoke(catalog, fxPath)
-                FxProfile.STRUCTURAL_FALLBACK -> null
-            }
+            ad.fileDirCtor9012?.newInstance(catalog, fxPath, javaFile)
+                ?: ad.fileCatalogOpenDir?.invoke(catalog, fxPath)
         }.getOrNull()
     }
 

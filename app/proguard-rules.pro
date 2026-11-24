@@ -8,3 +8,7 @@
 -keep class com.scluzlep.fxplusmodule.** { *; }
 -keep class rikka.shizuku.** { *; }
 -keep class moe.shizuku.** { *; }
+-keep class org.luckypray.dexkit.** { *; }
+-keep class com.google.flatbuffers.** { *; }
+-dontwarn org.luckypray.dexkit.**
+-dontwarn com.google.flatbuffers.**
