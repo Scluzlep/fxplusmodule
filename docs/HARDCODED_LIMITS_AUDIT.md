@@ -24,10 +24,11 @@
 | :--- | :--- | :--- | :--- | :--- |
 | 远程同目录滑动列表阈值 | `nextapp.fx.ui.viewer.image.k0.b` | `nextapp.fx.ui.viewer.image.b0.run` | 远程目录非当前项体积超过 `4194304` 字节直接过滤剔除 | 由 `SiblingSwipeHook` 按 `maxSwipeImageSizeMb` 放行，禁止全局 Hook 远程判断函数 |
 | 文件夹独立排序丢失 | `ImageViewerActivity.s1` / `k0.b` | `ImageViewerActivity.E` / `b0.run` | 启动查看器时未读取 `DirectoryOptionStore`，仅用全局排序配置 | 枚举同目录图片前读取 `DirectoryOptionStore.e` / `DirectoryOptionStore.c` 覆盖排序 |
-| 远程图片多次重复下载 | `ee.a.T` + `a9.c.g` | `qg.b.u` + `ua.b.h` | 先整图写入临时文件 `q5`/`m2` 再忽略该文件，静态解码再读流两次 | 接入 `PrefetchCacheManager` 磁盘单飞缓存与 `V1`/`c.read` 本地流复用，绝不写入 `q5`/`m2` |
+| 远程图片多次重复下载 | `ee.a.T` + `a9.c.g` | `qg.b.u` + `ua.b.h` | 先整图写入临时文件 `q5`/`m2` 再忽略该文件，静态解码再读流两次 | 接入 `PrefetchCacheManager` 磁盘单飞缓存与 `V1`/`c.read` 本地流复用，目录离开即由 `FolderCacheLifecycleHook` 清理关联缓存并取消在途传输 |
 | 远程 JPEG 旋转信息缺失 | `ImageViewerActivity.j1` / `b2` | `ImageViewerActivity.C` | 非 `file://` URI 跳过路径级 EXIF 解析，竖屏原图显示倒置 | 缓存命中后从本地缓存文件提取 `ExifInterface` 旋转角传入解码器 |
-| 大图软件渲染阈值 | `TouchImageDisplay.g` | `TouchImageDisplay.setImageBitmap` | 宽或高超过 `2160` px 强制启用软件图层，无区域分块解码 | 9108 已补充 `SDK < 35` 保护，模块保持原图直出并避免后台解码位图 |
-| 动图 GIF 帧探测阈值 | `a9.e.a` | `ua.b.f` | 扫描多帧标记最多读取 `1048576` 字节 | 随主图缓存流直接复用本地缓存字节，免除重复网络流打开 |
+| 大图软件渲染与画布上限 | `TouchImageDisplay.g` | `TouchImageDisplay.setImageBitmap` | 宽或高超过 `2160` px 强制切至 `LAYER_TYPE_SOFTWARE`，退回小图时切至 `LAYER_TYPE_HARDWARE`；9108 仅补充 `SDK < 35` 保护，无超大图分块 | 由 `TouchImageHardwareHook` 屏蔽软件/离屏层切换，保持 `LAYER_TYPE_NONE` 与双线性滤波；单边超画布上限或字节超 `96 MiB` 时在 `onDraw` 按 `2048` px 块与 1 px 重叠边带惰性渲染，单视图 LRU 上限 `24` 块 |
+| 动图 GIF 帧探测阈值 | `a9.e.a` | `ua.b.f` | 无缓冲逐字节扫描多帧标记，最多读取 `1048576` 字节 | 帧探测入口自动包裹 `64 KiB` `BufferedInputStream`，配合本地缓存复用免除逐字节 I/O |
+| 动图 GIF 播放模糊与低帧率 | `ImageViewerActivity.j1`/`l1` + `ImageDisplay.V` | `ImageViewerActivity.C` + `h.run` | 先投递预览图写入高倍 `prescale`，随后 `Movie` 播放未重置 `prescale` 且使用 `50ms` 定时器与软件层 | 由 `TouchImageHardwareHook` 以 `ImageDecoder` 解码为硬件 `AnimatedImageDrawable`，重置 `prescale = 1.0f` 与 `LAYER_TYPE_NONE`，绑定 43 字节 `1x1` `Movie` 哨兵维持手势并经 `Drawable.Callback` 按 VSYNC 驱动重绘；单帧静态 GIF 回落高清位图 |
 
 ---
 
@@ -72,6 +73,7 @@
 | 限制项目 | 9012 位置与符号 | 9108 位置与符号 | 硬编码阈值与机制 | 备注说明 |
 | :--- | :--- | :--- | :--- | :--- |
 | HTTP 客户端超时与连接池 | `ic.b.Z` / `ic.b.a0` | `oe.b.<init>` | 连接超时 `15000` ms，Socket 超时 `15000` ms，单路由 `10` 连接，总池 `20` 连接 | 并发预加载线程数设为 `1..4` 时可避免打满单主机连接配额 |
+| SMB 客户端方言与 SMB3 状态 | `com.hierynomus.smbj.SmbConfig.u` | `com.hierynomus.smbj.SmbConfig.a` | 两者均原生配置 `SMB_3_1_1`、`SMB_3_0_2`、`SMB_3_0`、`SMB_2_1`、`SMB_2_0_2`；9012 默认未启用强制加密，9108 仅置 `SMB2_GLOBAL_CAP_LARGE_MTU` | 原生 `smbj` 已支持 SMB2/SMB3，SMBv1 由 `SmbLegacyCatalog` 单独承载，模块无需额外 Hook |
 | SMB 客户端超时与列表计时器 | `smb.c.k` / `smb.a.h0` | `ae.c.run` / `fd.e.X` | SMB2 客户端超时 `15` 秒，库默认读写缓冲 `1048576` 字节，目录列举中断计时器 `30000` ms | 超大目录或高延迟 NAS 列目录超过 30 秒可能触发中断 |
 | Legacy SMBv1 超时配置 | `SmbLegacyCatalog.<clinit>` | `SmbLegacyCatalog.<clinit>` | `jcifs.smb.client.soTimeout` 固定为 `30000` ms | 仅作用于旧版 SMBv1 兼容实现 |
 | FTP 客户端超时配置 | `nextapp.fx.plus.dirimpl.ftp.c.p` | 同类网络配置路径 | 默认超时常量 `30000` ms | 受限于弱网环境或大文件暂停恢复场景 |
