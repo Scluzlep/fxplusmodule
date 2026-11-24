@@ -73,7 +73,7 @@ class MainActivity : ComponentActivity() {
                 val shizukuStatus by ShizukuStatusHelper.status.collectAsState()
                 Scaffold(
                     topBar = {
-                        TopAppBar(title = "FX Plus")
+                        TopAppBar(title = "fxplusmodule")
                     }
                 ) { innerPadding ->
                     MainScreenContent(

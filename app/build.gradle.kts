@@ -11,8 +11,8 @@ android {
         applicationId = "com.scluzlep.fxplusmodule"
         minSdk = 28
         targetSdk = 36
-        versionCode = System.getenv("FXPLUS_VERSION_CODE")?.toIntOrNull() ?: 1001001
-        versionName = System.getenv("FXPLUS_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.1"
+        versionCode = System.getenv("FXPLUS_VERSION_CODE")?.toIntOrNull() ?: 1002001
+        versionName = System.getenv("FXPLUS_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.2"
     }
 
     buildTypes {
